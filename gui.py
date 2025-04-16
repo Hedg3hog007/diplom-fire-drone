@@ -1,8 +1,9 @@
 # gui.py
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QComboBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from DroneFireModel import DataBase_data
+from Fire_power_model import FireModel
 
 class GUI(QMainWindow):
     def __init__(self):
@@ -28,14 +29,15 @@ class GUI(QMainWindow):
 
         # Инициализация параметров
         self.area = 50
+        self.height = 100
         self.selected_building = "Паркинг"
         self.building_id = 1
+        self.db = DataBase_data()
 
-        # Создание слайдеров
+        # Создание полей ввода
         self.create_sliders()
-
-        # Создание выпадающего списка
         self.create_combobox()
+        self.create_height_input()
 
     def create_sliders(self):
         """Создает слайдеры для управления параметрами."""
@@ -93,6 +95,30 @@ class GUI(QMainWindow):
         self.selected_building = text  
         self.update_graph()  
 
+
+    def create_height_input(self):
+
+        height_layout = QVBoxLayout()
+
+        # Метка для поля ввода
+        label = QLabel(f"Высота тушения (м): {self.height}")
+        height_layout.addWidget(label)
+        self.height_input = QLineEdit(str(self.height))
+        self.height_input.setPlaceholderText("Введите высоту (м)")  # Подсказка
+        self.height_input.textChanged.connect(lambda text: self.update_height(text, label)) # Обработчик события
+        height_layout.addWidget(self.height_input)
+
+        # Добавление в макет
+        self.layout.addLayout(height_layout)
+
+    def update_height(self, text, label):
+        self.height = int(text)
+        if self.height < 0:
+            self.height = 0
+        label.setText(f"Высота тушения (м): {self.height}")
+        self.update_graph()
+    
+
     def update_label(self, label, value):
         label.setText(f"{label.text().split('(')[0].strip()} ({value})")
 
@@ -112,22 +138,30 @@ class GUI(QMainWindow):
     def calculate_fire(self):
         
         import numpy as np
-        from Fire_power_model import FireModel
-        db = DataBase_data()
-        model_class = db._models.get('BUILDINGS_specification')
-        record = db.session.query(model_class).filter_by(name = self.selected_building).first()
+
+        model_class = self.db._models.get('BUILDINGS_specification')
+        record = self.db.session.query(model_class).filter_by(name = self.selected_building).first()
         self.building_id = getattr(record, 'id')
         fire_model = FireModel(self.building_id, self.area)
-        print ("Максимальная мощность пожара: ",  fire_model.fire_max_power() / 1000000, " МДж/с")
+        fire_max_power = fire_model.fire_max_power()
+        print ("Максимальная мощность пожара: ",  fire_max_power / 1000000, " МДж/с")
+        self.calculate_EA(fire_max_power)
            
         return fire_model.fire_calculate()
     
-    def calculate_EA(self):
+    def calculate_EA(self, fire_max_power):
 
         from EA_model import EA
-        db = DataBase_data()
-        model_class = db._models.get('FIRE_HOSE_specification')
-        results = db.session.query(model_class.id).all()
-        for i in len (results):
-            ea = EA(1,i)
+        model_class = self.db._models.get('FIRE_HOSE_specification')
+        results = self.db.session.query(model_class).all()
+        for i in range(len(results)):
+            ea = EA(1,i + 1, self.height)
+            ea_heat_absorption = ea.HeatAbsorption(fire_max_power)
+            record = self.db.session.query(model_class).filter_by(id = i + 1).first()
+            if ea_heat_absorption > fire_max_power:
+                print(getattr(record, 'name'), 'может. ', ea_heat_absorption / 1000000, ' МДж/с' )
+            else:
+                print(getattr(record, 'name'), 'не может. ', ea_heat_absorption / 1000000, ' МДж/с' )
+                
+                
             

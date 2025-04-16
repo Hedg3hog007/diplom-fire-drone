@@ -65,7 +65,9 @@ class DataBase_data:
         if record:
             return getattr(record, attribute)
         else:
-            return "Record not found"
+            print ("Record not found")
+            
+            
         
     
     def close_session(self):
