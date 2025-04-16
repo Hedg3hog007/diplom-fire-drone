@@ -23,13 +23,5 @@ class Database:
         session.add(result)
         session.commit()
         session.close()
-
-    def EA_simulation_result(EA_id, hose_id):
-        __tablename__ = 'EA_simulation_results'
-        id = Column(Integer, primary_Key=True)
-        height = Column(Integer)
-        EA_consumption = Column(Float)
-        EA_heat_capacity = Column(Float)
-
-        
+      
             

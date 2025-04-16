@@ -47,6 +47,3 @@ class EA:
         HeatAbsorption = consump * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start) + self.EA_vape_HeatCapacity * EA_vape_rate)
         return HeatAbsorption
 
-
-ea = EA(1,1)
-print (ea.HeatAbsorption())

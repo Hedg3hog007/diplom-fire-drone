@@ -13,7 +13,12 @@ class Simulation:
     
     def simulation(self, UAV_id, building_id, EA_id, fire_height, fire_area):
         # получить данные о БАС, о здании, об ОТВ
-        record = self.db.record_get('UAV_specification', 1, 'name')
+        UAV_record = self.db.record_get('UAV_specification', EA_id, 'name')
+        building_record = self.db.record_get('BUILDINGS_specification', building_id, 'name')
+        EA_record = self.db.record_get('EA_specification', EA_id, 'name')
+
+
+        
         
         # симуляция ОТВ в пожарном рукаве. Вес, время тушения
         

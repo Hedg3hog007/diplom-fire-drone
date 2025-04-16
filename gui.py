@@ -95,9 +95,11 @@ class GUI(QMainWindow):
         self.canvas.draw()
 
     def calculate_data(self, amplitude, frequency):
-        """Метод для расчета данных (заглушка)."""
-        # В реальности этот метод должен быть заменен на вызов из model.py
+        """Метод для расчета данных"""
+        
         import numpy as np
-        x = np.linspace(0, 10, 500)
-        y = amplitude * np.sin(frequency * x)
-        return x, y
+        from Fire_power_model import FireModel
+        fire_model = FireModel(1, 50)
+        return fire_model.fire_calculate()
+    
+        

@@ -10,7 +10,7 @@ class MainApp:
         self.app = QApplication(sys.argv)
 
         # Создание модели
-        self.model = FireModel()
+        self.model = FireModel(1, 50)
 
         # Создание GUI и передача модели
         self.gui = GUI()
