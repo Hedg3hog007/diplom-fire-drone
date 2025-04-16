@@ -4,15 +4,6 @@ from DroneFireModel import DataBase_data
 
 class EA:
 
-    EA_id = int()
-    fire_hose_id = int()
-    FireHose_diameter = float()
-    pressure = int()
-    EA_density = int()
-    EA_HeatCapacity = int()
-    EA_vape_HeatCapacity = int()
-
-
     db = DataBase_data()
     fire_hose_table = 'FIRE_HOSE_specification'
     EA_table = 'EA_specification'

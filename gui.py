@@ -1,7 +1,8 @@
 # gui.py
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QPushButton
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QComboBox
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from DroneFireModel import DataBase_data
 
 class GUI(QMainWindow):
     def __init__(self):
@@ -18,19 +19,23 @@ class GUI(QMainWindow):
         self.figure = Figure(figsize=(6, 4), dpi=100)
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)
-        self.line, = self.ax.plot([], [], label="Модель")
+        self.line, = self.ax.plot([], [], label="Мощность тепловыделения, Дж/с")
         self.ax.legend()
-        self.ax.set_title("График модели")
+        self.ax.set_title("Развитие пожара")
         self.ax.set_xlabel("Время (с)")
         self.ax.set_ylabel("Интенсивность горения")
         self.layout.addWidget(self.canvas)
 
         # Инициализация параметров
-        self.amplitude = 1
-        self.frequency = 1
+        self.area = 50
+        self.selected_building = "Паркинг"
+        self.building_id = 1
 
         # Создание слайдеров
         self.create_sliders()
+
+        # Создание выпадающего списка
+        self.create_combobox()
 
     def create_sliders(self):
         """Создает слайдеры для управления параметрами."""
@@ -52,54 +57,77 @@ class GUI(QMainWindow):
             self.layout.addLayout(slider_layout)
             return slider
 
-        # Создание слайдера для амплитуды
-        amplitude_slider = create_slider(
-            label_text="Амплитуда",
+        # Создание слайдера для площади помещения
+        area_slider = create_slider(
+            label_text="Площадь помещения",
             min_val=1,
-            max_val=10,
-            default_val=self.amplitude,
+            max_val=100,
+            default_val=self.area,
             callback=self.update_graph,
-            object_name="amplitude_slider"
+            object_name="area_slider"
         )
 
-        # Создание слайдера для частоты
-        frequency_slider = create_slider(
-            label_text="Частота",
-            min_val=1,
-            max_val=10,
-            default_val=self.frequency,
-            callback=self.update_graph,
-            object_name="frequency_slider"
-        )
+    def create_combobox(self):
+
+        combo_layout = QVBoxLayout()
+        
+        # Список типов помещений из базы данных
+        db = DataBase_data()
+        model_class = db._models.get('BUILDINGS_specification')
+        results = db.session.query(model_class.name).all()
+           
+        # Метка для списка
+        label = QLabel("Тип помещения:")
+        combo_layout.addWidget(label)
+
+        # Создание QComboBox
+        self.combobox = QComboBox()
+        self.combobox.addItems([(result.name) for result in results])
+        self.combobox.currentTextChanged.connect(self.on_combobox_changed)  # Обработчик события
+        combo_layout.addWidget(self.combobox)
+
+        # Добавление в макет
+        self.layout.addLayout(combo_layout)
+
+    def on_combobox_changed(self, text):
+        self.selected_building = text  
+        self.update_graph()  
 
     def update_label(self, label, value):
-        """Обновляет текст метки слайдера."""
         label.setText(f"{label.text().split('(')[0].strip()} ({value})")
 
     def update_graph(self):
-        """Обновляет данные графика."""
-        amplitude_slider = self.findChild(QSlider, "amplitude_slider")
-        frequency_slider = self.findChild(QSlider, "frequency_slider")
-
-        if amplitude_slider is None or frequency_slider is None:
+        area_slider = self.findChild(QSlider, "area_slider")
+        
+        if area_slider is None:
             return
-
-        self.amplitude = amplitude_slider.value()
-        self.frequency = frequency_slider.value()
-
-        # Здесь можно вызвать внешнюю модель для расчета данных
-        x, y = self.calculate_data(self.amplitude, self.frequency)
+        self.area = area_slider.value()
+        
+        x, y = self.calculate_fire()
         self.line.set_data(x, y)
         self.ax.relim()
         self.ax.autoscale_view()
         self.canvas.draw()
 
-    def calculate_data(self, amplitude, frequency):
-        """Метод для расчета данных"""
+    def calculate_fire(self):
         
         import numpy as np
         from Fire_power_model import FireModel
-        fire_model = FireModel(1, 50)
+        db = DataBase_data()
+        model_class = db._models.get('BUILDINGS_specification')
+        record = db.session.query(model_class).filter_by(name = self.selected_building).first()
+        self.building_id = getattr(record, 'id')
+        fire_model = FireModel(self.building_id, self.area)
+        print ("Максимальная мощность пожара: ",  fire_model.fire_max_power() / 1000000, " МДж/с")
+           
         return fire_model.fire_calculate()
     
-        
+    def calculate_EA(self):
+
+        from EA_model import EA
+        db = DataBase_data()
+        model_class = db._models.get('FIRE_HOSE_specification')
+        results = db.session.query(model_class.id).all()
+        for i in len (results):
+            ea = EA(1,i)
+            

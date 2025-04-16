@@ -67,7 +67,7 @@ class DataBase_data:
         else:
             return "Record not found"
         
-
+    
     def close_session(self):
         self.session.close()
 

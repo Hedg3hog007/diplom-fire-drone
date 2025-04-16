@@ -5,18 +5,8 @@ from DroneFireModel import DataBase_data
 
 class FireModel:
    
-    lower_heat_value = int()
-    flame_spread = float()
-    burnout_speed = float()
-    fire_load_specific_mass = int()
-    coef_burn_completeness = float()
-    max_fire_area = int()
-    time_max_power = float()
-    time_burnout = float()
-
     db = DataBase_data()
     building_table = 'BUILDINGS_specification'
-    building_id = int()
 
     def __init__(self, building_init_id: int, max_fire_area_init: int):
         self.building_id = building_init_id
