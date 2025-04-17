@@ -38,21 +38,29 @@ class FireModel:
 
         return Q_fire_burnout
     
-    def fire_calculate(self):
-        time = 0
-        fire_power = 0
-        y = np.array([])
-        while fire_power >= 0:
-            time += 1
-            if time < self.time_max_power:
-                y = np.append(y, self.fire_spread(time))
-            elif time < self.time_burnout:
-                y = np.append(y, self.fire_max_power())
-            elif time >= self.time_burnout:
-                y = np.append(y, self.fire_burnout(time))
-                fire_power = self.fire_burnout(time)
+    # def fire_calculate(self):
+    #     fire_power = 0
+    #     time = 0
+    #     while fire_power >= 0:
+    #         if time < self.time_max_power:
+    #             y = np.append(y, self.fire_spread(time))
+    #         elif time < self.time_burnout:
+    #             y = np.append(y, self.fire_max_power())
+    #         elif time >= self.time_burnout:
+    #             y = np.append(y, self.fire_burnout(time))
+    #             fire_power = self.fire_burnout(time)
+    #         time += 1
 
-        x = np.linspace(0, time, time)        
-        return x, y
+    #     x = np.linspace(0, time, time)        
+    #     return x, y
         
+    def fire_calculate(self, time: int, array: np.ndarray):
+
+        if time < self.time_max_power:
+            array = np.append(array, self.fire_spread(time))
+        elif time < self.time_burnout:
+            array = np.append(array, self.fire_max_power())
+        elif time >= self.time_burnout:
+            array = np.append(array, self.fire_burnout(time))
+        return array
         

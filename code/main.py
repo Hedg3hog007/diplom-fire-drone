@@ -7,15 +7,7 @@ from Fire_power_model import FireModel
 class MainApp:
     def __init__(self):
         self.app = QApplication(sys.argv)
-
-        # Создание модели
-        self.model = FireModel(1, 50)
-
-        # Создание GUI и передача модели
         self.gui = GUI()
-        self.gui.model = self.model  # Передаем модель в GUI
-
-        # Начальные данные
         self.gui.update_graph()
 
     def run(self):
