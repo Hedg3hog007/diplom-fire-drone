@@ -59,13 +59,14 @@ class DataBase_data:
     def record_get(self, tablename, id, attribute):
         model_class = self._models.get(tablename)
         if not model_class:
+            print('Table ', tablename, ' not found')
             return "Table not found"
         
         record = self.session.query(model_class).filter_by(id = id).first()
         if record:
             return getattr(record, attribute)
         else:
-            print ("Record not found")
+            print ("Record ", tablename, 'id=', id, ' case=', attribute, " not found")
             
             
         

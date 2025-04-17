@@ -1,31 +1,45 @@
 # gui.py
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit
+from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from DroneFireModel import DataBase_data
 from Fire_power_model import FireModel
+import numpy as np
 
 class GUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Динамическая модель тушения пожаров")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1000, 500)
 
         # Создание основного виджета
         self.main_widget = QWidget()
-        self.layout = QVBoxLayout(self.main_widget)
+        self.layout = QHBoxLayout(self.main_widget)
         self.setCentralWidget(self.main_widget)
 
-        # Создание графика
-        self.figure = Figure(figsize=(6, 4), dpi=100)
-        self.canvas = FigureCanvas(self.figure)
-        self.ax = self.figure.add_subplot(111)
-        self.line, = self.ax.plot([], [], label="Мощность тепловыделения, Дж/с")
-        self.ax.legend()
-        self.ax.set_title("Развитие пожара")
-        self.ax.set_xlabel("Время (с)")
-        self.ax.set_ylabel("Интенсивность горения")
-        self.layout.addWidget(self.canvas)
+        # График интенсивности пожара
+        self.fire_layout = QVBoxLayout()
+        self.figure_fire = Figure(figsize=(6, 4), dpi=100)
+        self.canvas_fire = FigureCanvas(self.figure_fire)
+        self.ax_fire = self.figure_fire.add_subplot(111)
+        self.line, = self.ax_fire.plot([], [], label="Мощность тепловыделения, Дж/с")
+        self.ax_fire.legend()
+        self.ax_fire.set_title("Развитие пожара")
+        self.ax_fire.set_xlabel("Время (с)")
+        self.ax_fire.set_ylabel("Интенсивность пожара (Дж/с)")
+        self.fire_layout.addWidget(self.canvas_fire)
+        self.layout.addLayout(self.fire_layout)
+
+        # График интенсивности тушения
+        self.EA_layout = QVBoxLayout()
+        self.figure_hose = Figure(figsize=(6, 4), dpi=100)
+        self.canvas_hose = FigureCanvas(self.figure_hose)
+        self.ax_hose = self.figure_hose.add_subplot(111)
+        self.ax_hose.set_title("Зависимость интенсивности тушения от высоты")
+        self.ax_hose.set_xlabel("Высота тушения (м)")
+        self.ax_hose.set_ylabel("Интенсивность тушения (МДж/с)")
+        self.EA_layout.addWidget(self.canvas_hose)
+        self.layout.addLayout(self.EA_layout)
 
         # Инициализация параметров
         self.area = 50
@@ -56,7 +70,7 @@ class GUI(QMainWindow):
             slider.valueChanged.connect(callback)
             slider_layout.addWidget(slider)
 
-            self.layout.addLayout(slider_layout)
+            self.fire_layout.addLayout(slider_layout)
             return slider
 
         # Создание слайдера для площади помещения
@@ -89,12 +103,11 @@ class GUI(QMainWindow):
         combo_layout.addWidget(self.combobox)
 
         # Добавление в макет
-        self.layout.addLayout(combo_layout)
+        self.fire_layout.addLayout(combo_layout)
 
     def on_combobox_changed(self, text):
         self.selected_building = text  
         self.update_graph()  
-
 
     def create_height_input(self):
 
@@ -109,7 +122,7 @@ class GUI(QMainWindow):
         height_layout.addWidget(self.height_input)
 
         # Добавление в макет
-        self.layout.addLayout(height_layout)
+        self.EA_layout.addLayout(height_layout)
 
     def update_height(self, text, label):
         self.height = int(text)
@@ -117,51 +130,71 @@ class GUI(QMainWindow):
             self.height = 0
         label.setText(f"Высота тушения (м): {self.height}")
         self.update_graph()
-    
-
+   
     def update_label(self, label, value):
         label.setText(f"{label.text().split('(')[0].strip()} ({value})")
 
     def update_graph(self):
+
+        # Обновление первого графика
         area_slider = self.findChild(QSlider, "area_slider")
-        
-        if area_slider is None:
-            return
         self.area = area_slider.value()
-        
         x, y = self.calculate_fire()
         self.line.set_data(x, y)
-        self.ax.relim()
-        self.ax.autoscale_view()
-        self.canvas.draw()
+        self.ax_fire.relim()
+        self.ax_fire.autoscale_view()
+        self.canvas_fire.draw()
+
+        # Обновление второго графика
+        heights = np.linspace(0, self.height, self.height)
+        
+        hose_names = []
+        for i in range (len(self.db.session.query(self.db._models.get('FIRE_HOSE_specification')).all())):
+            hose_names.append(self.db.record_get('FIRE_HOSE_specification', i + 1, 'name'))
+        
+        # Очистка графика/
+        self.ax_hose.clear()
+        self.ax_hose.set_title("Интенсивность тушения от высоты")
+        self.ax_hose.set_xlabel("Высота тушения (м)")
+        self.ax_hose.set_ylabel("Интенсивность тушения (Дж/с)")
+
+        # Рассчитываем и отображаем линии для каждого типа рукава
+        for i in range (len(hose_names)):
+            intensities = self.calculate_hose_intensities(heights, hose_id = i + 1)
+            self.ax_hose.plot(heights, intensities, label = hose_names[i])
+
+        # Добавляем линию максимальной мощности пожара
+        max_fire_plot = []
+        for h in heights:
+            max_fire_plot.append(self.max_fire_power)
+        self.ax_hose.plot(heights, max_fire_plot, label = "Макс. мощность пожара", linestyle='--', color='red')
+
+        # Добавляем легенду
+        self.ax_hose.legend()
+
+        # Перерисовываем график
+        self.ax_hose.relim()
+        self.ax_hose.autoscale_view()
+        self.canvas_hose.draw()
+
+    def calculate_hose_intensities(self, heights, hose_id):
+        from EA_model import EA
+        ea = EA(1, hose_id, self.height)
+        intensities = []
+        for h in heights:
+            intensities.append(ea.HeatAbsorption())
+
+        return intensities 
+
 
     def calculate_fire(self):
-        
-        import numpy as np
 
         model_class = self.db._models.get('BUILDINGS_specification')
         record = self.db.session.query(model_class).filter_by(name = self.selected_building).first()
         self.building_id = getattr(record, 'id')
         fire_model = FireModel(self.building_id, self.area)
-        fire_max_power = fire_model.fire_max_power()
-        print ("Максимальная мощность пожара: ",  fire_max_power / 1000000, " МДж/с")
-        self.calculate_EA(fire_max_power)
+        self.max_fire_power = fire_model.fire_max_power()
            
         return fire_model.fire_calculate()
-    
-    def calculate_EA(self, fire_max_power):
-
-        from EA_model import EA
-        model_class = self.db._models.get('FIRE_HOSE_specification')
-        results = self.db.session.query(model_class).all()
-        for i in range(len(results)):
-            ea = EA(1,i + 1, self.height)
-            ea_heat_absorption = ea.HeatAbsorption(fire_max_power)
-            record = self.db.session.query(model_class).filter_by(id = i + 1).first()
-            if ea_heat_absorption > fire_max_power:
-                print(getattr(record, 'name'), 'может. ', ea_heat_absorption / 1000000, ' МДж/с' )
-            else:
-                print(getattr(record, 'name'), 'не может. ', ea_heat_absorption / 1000000, ' МДж/с' )
-                
-                
+  
             

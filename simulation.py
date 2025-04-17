@@ -27,7 +27,4 @@ class Simulation:
         
         # симуляция пожара. Развитие, теплообмен с ОТВ
 
-
-sim = Simulation()
-sim.simulation(1, 1, 1, 100, 50)
         

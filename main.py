@@ -3,7 +3,6 @@ import sys
 from PyQt5.QtWidgets import QApplication
 from gui import GUI
 from Fire_power_model import FireModel
-import EA_model
 
 class MainApp:
     def __init__(self):

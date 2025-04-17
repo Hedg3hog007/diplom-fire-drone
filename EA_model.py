@@ -25,26 +25,27 @@ class EA:
         
        
 
-    def EAConsumption_height (self):
+    def EAConsumption (self):
         fire_hose = Fire_hose(self.FireHose_diameter, self.EA_density, self.EA_viscosity)
-        for i in range (self.height):
-            self.pressure -= fire_hose.gravitation_loss_per_meter()
-            if self.pressure < 0:
-                break
-            else:
-                EAConsumption = math.pi * (self.FireHose_diameter / 2) ** 2 * math.sqrt (2 * self.pressure / self.EA_density)
-                self.pressure -= fire_hose.friction_loss_per_meter(EAConsumption)
-                EAConsumption = math.pi * (self.FireHose_diameter / 2) ** 2 * math.sqrt(2 * self.pressure / self.EA_density)
-                return EAConsumption
+        self.pressure -= fire_hose.gravitation_loss_per_meter()
+        if self.pressure < 0:
+            return 0
+        else:
+            EAConsumption = math.pi * (self.FireHose_diameter / 2) ** 2 * math.sqrt (2 * self.pressure / self.EA_density)
+            self.pressure -= fire_hose.friction_loss_per_meter(EAConsumption)
+            EAConsumption = math.pi * (self.FireHose_diameter / 2) ** 2 * math.sqrt(2 * self.pressure / self.EA_density)
+        
+        return EAConsumption
 
         
 
-    def HeatAbsorption (self, Fire_power):
+    # def HeatAbsorption (self, Fire_power):
+    def HeatAbsorption (self):
 
-        EA_consumption = self.EAConsumption_height()
-        Q1 = EA_consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start))
+        EA_consumption = self.EAConsumption()
+        # Q1 = EA_consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start))
         # EA_vape_rate = 1 / (1 + math.exp(-self.coef * ((Fire_power / Q1) - 1)))
-        EA_vape_rate = 0
+        EA_vape_rate = 0  # заглушка, нужно заменить на реальную формулу
         HeatAbsorption = EA_consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start) + self.EA_vape_HeatCapacity * EA_vape_rate)
         return HeatAbsorption
 
