@@ -6,8 +6,8 @@ g = 9.81
 
 class Fire_hose:   
 
-    def __init__ (self, fire_hose_diameter, EA_density_init, EA_viscosity_init):
-        self.diameter = fire_hose_diameter
+    def __init__ (self, fire_hose_diameter_init, EA_density_init, EA_viscosity_init):
+        self.diameter = fire_hose_diameter_init
         self.EA_density = EA_density_init
         self.EA_viscosity = EA_viscosity_init
 

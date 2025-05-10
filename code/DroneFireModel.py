@@ -47,6 +47,7 @@ class DataBase_data:
         burnout_speed = Column(Float)
         fire_load_specific_mass = Column(Integer)
         coef_burn_completeness = Column(Float)
+        heat_capacity_per_meter = Column(Integer)
 
     def __init__(self):
         self._models = {

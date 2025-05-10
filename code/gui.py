@@ -4,6 +4,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from DroneFireModel import DataBase_data
 from Fire_power_model import FireModel
+from EA_model import EA
 import numpy as np
 
 class GUI(QMainWindow):
@@ -43,22 +44,30 @@ class GUI(QMainWindow):
 
         # Инициализация начальных параметров
         self.area = 50  # Площадь помещения
-        self.height = 90 # Высота тушения
-        self.selected_building = "Паркинг" # Начальный тип помещения
-        self.building_id = 1 
+        self.height = 50 # Высота тушения
         self.db = DataBase_data()
+
         self.hose_names = [] # Список названий пожарных рукавов
-        for i in range (len(self.db.session.query(self.db._models.get('FIRE_HOSE_specification')).all())):
+        self.hose_tablename = self.db._models.get('FIRE_HOSE_specification')
+        for i in range (len(self.db.session.query(self.hose_tablename).all())):
             self.hose_names.append(self.db.record_get('FIRE_HOSE_specification', i + 1, 'name'))
 
+        self.selected_hose = self.hose_names[0] # Начальный тип рукава
+        self.hose_id = 1 
+ 
+
         # Список типов помещений из базы данных
-        self.buildings_spec_db_tablename = self.db._models.get('BUILDINGS_specification')
-        self.buildings_names = self.db.session.query(self.buildings_spec_db_tablename.name).all()
+        self.buildings_tablename = self.db._models.get('BUILDINGS_specification')
+        self.buildings_names = self.db.session.query(self.buildings_tablename.name).all()
+
+        self.selected_building = self.buildings_names[0] # Начальный тип помещения
+        self.building_id = 1 
 
         # Создание полей ввода
         self.create_sliders()
-        self.create_combobox()
+        self.create_buildings_combobox()
         self.create_height_input()
+        self.create_hose_combobox()
 
     def create_sliders(self):
         """Создает слайдеры для управления параметрами."""
@@ -90,7 +99,7 @@ class GUI(QMainWindow):
             object_name="area_slider"
         )
 
-    def create_combobox(self):
+    def create_buildings_combobox(self):
         combo_layout = QVBoxLayout()
                           
         # Метка для списка
@@ -98,19 +107,42 @@ class GUI(QMainWindow):
         combo_layout.addWidget(label)
 
         # Создание QComboBox
-        self.combobox = QComboBox()
-        self.combobox.addItems([(result.name) for result in self.buildings_names])
-        self.combobox.currentTextChanged.connect(self.on_combobox_changed)  # Обработчик события
-        combo_layout.addWidget(self.combobox)
+        self.buildings_combobox = QComboBox()
+        self.buildings_combobox.addItems([(result.name) for result in self.buildings_names])
+        self.buildings_combobox.currentTextChanged.connect(self.buildings_combobox_changed)  # Обработчик события
+        combo_layout.addWidget(self.buildings_combobox)
 
         # Добавление в макет
         self.fire_layout.addLayout(combo_layout)
 
-    def on_combobox_changed(self, text):
+    def create_hose_combobox(self):
+        combo_layout = QVBoxLayout()
+                          
+        # Метка для списка
+        label = QLabel("Тип рукава:")
+        combo_layout.addWidget(label)
+
+        # Создание QComboBox
+        self.hose_combobox = QComboBox()
+        self.hose_combobox.addItems(self.hose_names)
+        self.hose_combobox.currentTextChanged.connect(self.hose_combobox_changed)
+        combo_layout.addWidget(self.hose_combobox)
+
+        # Добавление в макет
+        self.EA_layout.addLayout(combo_layout)
+
+    def buildings_combobox_changed(self, text):
         self.selected_building = text  
         # Обновление ID выбранного здания по имени
-        record = self.db.session.query(self.buildings_spec_db_tablename).filter_by(name = self.selected_building).first()
+        record = self.db.session.query(self.buildings_tablename).filter_by(name = self.selected_building).first()
         self.building_id = getattr(record, 'id')
+        self.update_graph()
+
+    def hose_combobox_changed(self, text):
+        self.selected_hose = text
+        # Обновление ID выбранного рукава по имени
+        record = self.db.session.query(self.hose_tablename).filter_by(name = self.selected_hose).first()
+        self.hose_id = getattr(record, 'id')
         self.update_graph()
 
     def create_height_input(self):
@@ -146,8 +178,20 @@ class GUI(QMainWindow):
         # Обновление графика развития пожара
         area_slider = self.findChild(QSlider, "area_slider")
         self.area = area_slider.value()
+        self.ax_fire.clear()
         x, y = self.natural_fire_spread()
-        self.line.set_data(x, y)
+        self.ax_fire.plot(x, y,  label = "Натуральное развитие пожара")
+
+        # Обновление графика противодействия пожару
+        x_ext, y_ext = self.fire_extinguishing_simulation()
+        self.ax_fire.set_title("Развитие пожара")
+        self.ax_fire.set_xlabel("Время (с)")
+        self.ax_fire.set_ylabel("Интенсивность пожара (Дж/с)")
+        self.ax_fire.plot(x_ext, y_ext, label="с учетом тушения", )
+
+        self.ax_fire.legend()
+
+        # Отображаем график
         self.ax_fire.relim()
         self.ax_fire.autoscale_view()
         self.canvas_fire.draw()
@@ -179,16 +223,14 @@ class GUI(QMainWindow):
         self.canvas_hose.draw()
 
     def calculate_hose_intensities(self, heights, hose_id):
-        from EA_model import EA
-        ea = EA(1, hose_id, self.height)
+        ea_model = EA(1, hose_id, self.height)
         intensities = []
         for h in heights:
-            intensities.append(ea.HeatAbsorption())
+            intensities.append(ea_model.HeatAbsorption())
 
         return intensities 
 
     def natural_fire_spread(self):
-
         # Рассчитываем мощность пожара без учета тушения
         self.fire_model = FireModel(self.building_id, self.area)
         self.max_fire_power = self.fire_model.fire_max_power()
@@ -197,7 +239,7 @@ class GUI(QMainWindow):
         fire_power = 0
         time = 0
         while fire_power >= 0:
-            y = self.fire_model.fire_calculate(time, y)
+            y = np.append(y, self.fire_model.fire_calculate(time))
             fire_power = y[-1]
             time += 1
         
@@ -206,12 +248,49 @@ class GUI(QMainWindow):
         return x, y
   
     def fire_extinguishing_simulation(self):
-        # Время начала тушения
+        # Инициализация параметров для моделирования тушения
         import random
         self.time_extinguishing_start = random.randint(8 * 60, 13 * 60)
+        y = np.array([])
         time = 0
         fire_power = 0
-        while fire_power >= 0:
-            if self.time_extinguishing_start:
-                return
-        
+        ea_model = EA(1, self.hose_id, self.height)
+        for i in range (self.height):
+            EA_power = ea_model.HeatAbsorption()
+
+        fire_extinguishing_model = FireModel(self.building_id, self.area)
+
+        # Моделирование тушения
+        while (fire_extinguishing_model.max_fire_area - fire_extinguishing_model.extinguished_area > 0) and (fire_power >= 0):
+            
+            
+
+            # Развитие пожара до начала тушения
+            if time < self.time_extinguishing_start:
+                y = np.append(y, fire_extinguishing_model.fire_calculate(time))
+                fire_power = y[-1]
+                time += 1
+
+            # Тушение пожара
+            else:
+                y = np.append(y, fire_extinguishing_model.fire_calculate(time))
+                fire_power = y[-1]
+                fire_power_per_meter = fire_power / self.area - fire_extinguishing_model.extinguished_area
+                if fire_power_per_meter < EA_power:
+                    burning_temperature = 1000
+                    while burning_temperature > 230:
+                        delta_temperature = (EA_power - fire_power_per_meter) / fire_extinguishing_model.heat_capacity_per_meter
+                        burning_temperature -= delta_temperature
+                        time += 1
+                        y = np.append(y, fire_extinguishing_model.fire_calculate(time))
+                    fire_extinguishing_model.extinguished_area += 1
+                else:
+                    print("Пожар не потушен")
+                    time += 1
+                    x = np.linspace(0, time, time)
+                    return x, y
+                time += 1
+
+        x = np.linspace(0, time, time)
+        print("Пожар потушен за", (time - self.time_extinguishing_start) // 60, "мин", (time - self.time_extinguishing_start) % 60, "сек")
+        return x, y
