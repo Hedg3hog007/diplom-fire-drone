@@ -184,10 +184,12 @@ class GUI(QMainWindow):
 
         # Обновление графика противодействия пожару
         x_ext, y_ext = self.fire_extinguishing_simulation()
+        x_ext_uav, y_ext_uav = self.UAV_fire_extinguishing_simulation()
         self.ax_fire.set_title("Развитие пожара")
         self.ax_fire.set_xlabel("Время (с)")
         self.ax_fire.set_ylabel("Интенсивность пожара (Дж/с)")
-        self.ax_fire.plot(x_ext, y_ext, label="с учетом тушения", )
+        self.ax_fire.plot(x_ext, y_ext, label="прицепной рукав")
+        self.ax_fire.plot(x_ext_uav, y_ext_uav, label="бортовой резервуар")
 
         self.ax_fire.legend()
 
@@ -262,8 +264,6 @@ class GUI(QMainWindow):
 
         # Моделирование тушения
         while (fire_extinguishing_model.max_fire_area - fire_extinguishing_model.extinguished_area > 0) and (fire_power >= 0):
-            
-            
 
             # Развитие пожара до начала тушения
             if time < self.time_extinguishing_start:
@@ -275,7 +275,7 @@ class GUI(QMainWindow):
             else:
                 y = np.append(y, fire_extinguishing_model.fire_calculate(time))
                 fire_power = y[-1]
-                fire_power_per_meter = fire_power / self.area - fire_extinguishing_model.extinguished_area
+                fire_power_per_meter = fire_power / (self.area - fire_extinguishing_model.extinguished_area)
                 if fire_power_per_meter < EA_power:
                     burning_temperature = 1000
                     while burning_temperature > 230:
@@ -294,3 +294,76 @@ class GUI(QMainWindow):
         x = np.linspace(0, time, time)
         print("Пожар потушен за", (time - self.time_extinguishing_start) // 60, "мин", (time - self.time_extinguishing_start) % 60, "сек")
         return x, y
+
+
+    def UAV_fire_extinguishing_simulation(self):
+        from UAV_model import UAV
+        
+        # Инициализация переменных
+        uav_model = UAV(1) # создать список дронов
+        ea_model = EA(1, fire_hose_id_init = 5, height_init = self.height) # расход 0.021 м3/с
+        EA_power = ea_model.HeatAbsorption()
+        ea_consumption = 0.021
+        time = 0
+        time_start = self.time_extinguishing_start + uav_model.service_time() + uav_model.lift_time(self.height) 
+        fire_power = 0
+        y = np.array([])
+        uav_fire_extinguishing_model = FireModel(self.building_id, self.area)
+
+        for i in range (time_start):
+            y = np.append(y, uav_fire_extinguishing_model.fire_calculate(time))
+            time += 1
+
+        while (uav_fire_extinguishing_model.max_fire_area - uav_fire_extinguishing_model.extinguished_area > 0) and (fire_power) >= 0:
+            
+            # Тушение пожара
+            uav_ea_volume = uav_model.payload / 1000
+            for i in range (round(uav_ea_volume / ea_consumption)):
+                y = np.append(y, uav_fire_extinguishing_model.fire_calculate(time))
+                fire_power = y[-1]
+                fire_power_per_meter = fire_power / (self.area - uav_fire_extinguishing_model.extinguished_area)
+                if fire_power_per_meter < EA_power:
+                    burning_temperature = 1000
+                    while burning_temperature > 230:
+                        delta_temperature = (EA_power - fire_power_per_meter) / uav_fire_extinguishing_model.heat_capacity_per_meter
+                        burning_temperature -= delta_temperature
+                        time += 1
+                        y = np.append(y, uav_fire_extinguishing_model.fire_calculate(time))
+                    uav_fire_extinguishing_model.extinguished_area += 1
+                else:
+                    print("Пожар не тушится. Не хватает напора воды")
+                    time += 1
+                    x = np.linspace(0, time, time)
+                    return x, y
+                time += 1
+            
+            # Вводим модель свободного горения
+            natural_fire_model = FireModel(self.building_id, uav_fire_extinguishing_model.extinguished_area)
+            time_free_burn = 0
+            # Снижение дрона
+            for i in range (uav_model.descend_time(self.height)):
+                fire_power = uav_fire_extinguishing_model.fire_calculate(time)
+                power_free_burn = natural_fire_model.fire_calculate(time_free_burn)
+                time_free_burn += 1
+                time += 1
+                y = np.append(y, fire_power + power_free_burn)
+            
+            # Заправка резервуара
+            for i in range (uav_model.EA_refill_time()):
+                fire_power = uav_fire_extinguishing_model.fire_calculate(time)
+                power_free_burn = natural_fire_model.fire_calculate(time_free_burn)
+                time_free_burn += 1
+                time += 1
+                y = np.append(y, fire_power + power_free_burn)
+
+            # Подъём дрона
+            for i in range (uav_model.lift_time(self.height)):
+                fire_power = uav_fire_extinguishing_model.fire_calculate(time)
+                power_free_burn = natural_fire_model.fire_calculate(time_free_burn)
+                time_free_burn += 1
+                time += 1
+                y = np.append(y, fire_power + power_free_burn)
+            uav_fire_extinguishing_model.extinguished_area -= natural_fire_model.fire_area
+
+        x = np.linspace(0, time, time)
+        return x, y        

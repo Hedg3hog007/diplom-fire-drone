@@ -23,8 +23,8 @@ class FireModel:
         self.extinguished_area = 0
 
     def fire_spread(self,  time: int):
-        fire_area = math.pi / 2 * (self.flame_spread * time) ** 2  -  self.extinguished_area    
-        Q_fire_spread = self.coef_burn_completeness * self.lower_heat_value * self.burnout_speed * fire_area
+        self.fire_area = math.pi / 2 * (self.flame_spread * time) ** 2  -  self.extinguished_area    
+        Q_fire_spread = self.coef_burn_completeness * self.lower_heat_value * self.burnout_speed * self.fire_area
 
         return Q_fire_spread
 
@@ -34,8 +34,8 @@ class FireModel:
         return Q_fire_max_power
     
     def fire_burnout(self, time: int):
-        fire_area = self.max_fire_area - math.pi / 2 * (self.flame_spread * (time - self.time_burnout)) ** 2 - self.extinguished_area
-        Q_fire_burnout = self.coef_burn_completeness * self.lower_heat_value * self.burnout_speed * fire_area
+        self.fire_area = self.max_fire_area - math.pi / 2 * (self.flame_spread * (time - self.time_burnout)) ** 2 - self.extinguished_area
+        Q_fire_burnout = self.coef_burn_completeness * self.lower_heat_value * self.burnout_speed * self.fire_area
 
         return Q_fire_burnout
     

@@ -19,6 +19,7 @@ class DataBase_data:
         mass = Column(Integer)
         payload = Column(Integer)
         flight_time = Column(Integer)
+        # UAV_hose_id = Column(Float) # ввести в БД
 
     class FIRE_HOSE_specification(Base):
         __tablename__ = 'FIRE_HOSE_specification'
