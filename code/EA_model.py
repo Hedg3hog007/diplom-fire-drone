@@ -23,8 +23,6 @@ class EA:
         self.temperature_boiling = 100  # заглушка
         self.coef = 5                   # заглушка
         
-       
-
     def EAConsumption (self):
         fire_hose = Fire_hose(self.FireHose_diameter, self.EA_density, self.EA_viscosity)
         self.pressure -= fire_hose.gravitation_loss_per_meter()
@@ -37,14 +35,10 @@ class EA:
         
         return EAConsumption
 
-        
-
     def HeatAbsorption (self):
-
         EA_consumption = self.EAConsumption()
         # Q1 = EA_consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start))
         # EA_vape_rate = 1 / (1 + math.exp(-self.coef * ((Fire_power / Q1) - 1)))
         EA_vape_rate = 0  # заглушка
         HeatAbsorption = EA_consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start) + self.EA_vape_HeatCapacity * EA_vape_rate)
         return HeatAbsorption
-

@@ -1,15 +1,24 @@
 # Fire_hose_model.py
 import math
+from DroneFireModel import DataBase_data
 
 air_density = 1.293
 g = 9.81
 
 class Fire_hose:   
+    db = DataBase_data()
+    fire_hose_table = 'FIRE_HOSE_specification'
 
     def __init__ (self, fire_hose_diameter_init, EA_density_init, EA_viscosity_init):
         self.diameter = fire_hose_diameter_init
         self.EA_density = EA_density_init
         self.EA_viscosity = EA_viscosity_init
+    # Надо как-то получить специфик масс из базы данных для расчёта дрона с прицепным пожарным рукавом
+    # def __init__ (self, fire_hose_init_id):
+    #     self.fire_hose_id = fire_hose_init_id
+    #     self.diameter = self.db.record_get(self.fire_hose_table, fire_hose_init_id, 'diameter')
+    #     self.pressure = self.db.record_get(self.fire_hose_table, fire_hose_init_id, 'pressure')
+    #     self.specific_mass = self.db.record_get(self.fire_hose_table, fire_hose_init_id, 'specific_mass')
 
     def gravitation_loss_per_meter(self):
         gravitation_loss  = (self.EA_density - air_density) * g
