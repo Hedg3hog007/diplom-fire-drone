@@ -1,10 +1,13 @@
 # gui.py
-from PyQt5.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit
+from PyQt5.QtWidgets import QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from DroneFireModel import DataBase_data
 from Fire_power_model import FireModel
+from Fire_hose_model import Fire_hose
+from UAV_model import UAV
 from EA_model import EA
+import random
 import numpy as np
 
 class GUI(QMainWindow):
@@ -23,11 +26,11 @@ class GUI(QMainWindow):
         self.figure_fire = Figure(figsize=(6, 4), dpi=100)
         self.canvas_fire = FigureCanvas(self.figure_fire)
         self.ax_fire = self.figure_fire.add_subplot(111)
-        self.line, = self.ax_fire.plot([], [], label="Мощность тепловыделения, Дж/с")
-        self.ax_fire.legend(loc = 'upper left')
+        self.line, = self.ax_fire.plot([], [], label="Мощность тепловыделения, Дж")
+        self.ax_fire.legend(loc = 'upper right')
         self.ax_fire.set_title("Развитие пожара")
         self.ax_fire.set_xlabel("Время (с)")
-        self.ax_fire.set_ylabel("Интенсивность пожара (Дж/с)")
+        self.ax_fire.set_ylabel("Интенсивность пожара (Дж)")
         self.left_layout.addWidget(self.canvas_fire)
         self.layout.addLayout(self.left_layout)
 
@@ -45,6 +48,7 @@ class GUI(QMainWindow):
         # Инициализация начальных параметров
         self.area = 60  # Начальная площадь помещения
         self.height = 60 # Начальная высота тушения
+        self.time_extinguishing_start = random.randint(8, 13)  # Начальное время тушения
         self.db = DataBase_data()
 
         self.hose_names = [] # Список названий пожарных рукавов
@@ -93,7 +97,7 @@ class GUI(QMainWindow):
         def create_slider(label_text, min_val, max_val, default_val, callback, object_name):
             slider_layout = QVBoxLayout()
 
-            label = QLabel(f"{label_text} ({default_val})")
+            label = QLabel(f"{label_text} {default_val}")
             slider_layout.addWidget(label)
 
             slider = QSlider(orientation=1)  # Горизонтальный слайдер
@@ -110,12 +114,21 @@ class GUI(QMainWindow):
 
         # Создание слайдера для площади помещения
         area_slider = create_slider(
-            label_text="Площадь помещения",
+            label_text="Площадь помещения (м2):",
             min_val=1,
             max_val=100,
             default_val=self.area,
             callback = self.area_changed,
             object_name="area_slider"
+        )
+
+        time_extinguishing_start_slider = create_slider(
+            label_text="Время начала тушения (мин):",
+            min_val=5,
+            max_val=30,
+            default_val=self.time_extinguishing_start,
+            callback = self.time_extinguishing_start_changed,
+            object_name="time_extinguishing_start_slider"
         )
 
     def create_buildings_combobox(self):
@@ -224,7 +237,10 @@ class GUI(QMainWindow):
         self.tank_UAV_main_layout.addLayout(tank_UAV_combo_layout)
 
         self.tank_UAV_fire_extinguishing_time_label = QLabel()
+        self.tank_UAV_efficiency_label = QLabel()
+
         self.tank_UAV_main_layout.addWidget(self.tank_UAV_fire_extinguishing_time_label)
+        self.tank_UAV_main_layout.addWidget(self.tank_UAV_efficiency_label)
 
     def create_hose_UAV_combobox(self):
         hose_UAV_combo_layout = QVBoxLayout()
@@ -255,10 +271,13 @@ class GUI(QMainWindow):
         self.hose_UAV_main_layout.addLayout(hose_UAV_combo_layout)
 
         self.hose_UAV_fire_extinguishing_time_label = QLabel()
+        self.hose_UAV_efficiency_label = QLabel()
+
         self.hose_UAV_main_layout.addWidget(self.hose_UAV_fire_extinguishing_time_label)
+        self.hose_UAV_main_layout.addWidget(self.hose_UAV_efficiency_label)
 
     def buildings_combobox_changed(self, text):
-        self.selected_building = text  
+        self.selected_building = text
         # Обновление ID выбранного здания по имени
         record = self.db.session.query(self.buildings_tablename).filter_by(name = self.selected_building).first()
         self.building_id = getattr(record, 'id')
@@ -302,10 +321,19 @@ class GUI(QMainWindow):
         self.area = value
         self.update_graph()
 
+    def time_extinguishing_start_changed(self, value):
+        self.time_extinguishing_start = value
+        self.update_graph()
+
     def height_changed(self, text, label):
-        self.height = int(text)
-        if self.height < 0:
+        
+        if text == "":
             self.height = 0
+        else:
+            if int(text) < 0:
+                self.height = 0
+            else:
+                self.height = int(text)
         label.setText(f"Высота тушения (м): {self.height}")
         self.update_graph()
    
@@ -329,7 +357,7 @@ class GUI(QMainWindow):
         self.ax_fire.plot(x_ext, y_ext, label="прицепной рукав")
         self.ax_fire.plot(x_ext_tank_uav, y_ext_tank_uav, label="бортовой резервуар")
 
-        self.ax_fire.legend(loc = 'upper left')
+        self.ax_fire.legend(loc = 'upper right')
 
         # Отображаем график
         self.ax_fire.relim()
@@ -344,6 +372,8 @@ class GUI(QMainWindow):
         self.ax_hose.set_title("Интенсивность тушения от высоты")
         self.ax_hose.set_xlabel("Высота тушения (м)")
         self.ax_hose.set_ylabel("Интенсивность тушения (Дж/с)")
+
+
 
         # Рассчитываем и отображаем линии для каждого типа рукава
         for i in range (len(self.hose_names)):
@@ -363,7 +393,7 @@ class GUI(QMainWindow):
         self.canvas_hose.draw()
 
     def calculate_hose_intensities(self, heights, hose_id):
-        ea_model = EA(1, hose_id, self.height)
+        ea_model = EA(1, hose_id)
         intensities = []
         for h in heights:
             intensities.append(ea_model.HeatAbsorption())
@@ -389,22 +419,32 @@ class GUI(QMainWindow):
   
     def hose_UAV_fire_extinguishing_simulation(self):
         # Инициализация параметров для моделирования тушения
-        import random
-        self.time_extinguishing_start = random.randint(8 * 60, 13 * 60)
         y = np.array([])
         time = 0
         fire_power = 0
-        ea_model = EA(1, self.hose_UAV_hose_id, self.height)
-        for i in range (self.height):
+        weight = 0
+        ea_model = EA(1, self.hose_UAV_hose_id)
+        hose_uav_model = UAV(self.hose_UAV_id)
+        hose_model = Fire_hose(self.hose_UAV_hose_id)
+        
+        for i in range (self.height + 1):
+            weight += ea_model.weight_per_meter() + hose_model.weight_per_meter()
+        if weight > hose_uav_model.payload:
+            self.hose_UAV_fire_extinguishing_time_label.setText("Дрон не может поднять рукав")
+            self.hose_UAV_fire_extinguishing_time_label.setStyleSheet('background-color: lightcoral')
+            x = np.linspace(0, time, time)
+            return x, y
+        for i in range (self.height + 1):
             EA_power = ea_model.HeatAbsorption()
 
         hose_UAV_fire_model = FireModel(self.building_id, self.area)
+        # hose_weight = 
 
         # Моделирование тушения
         while (hose_UAV_fire_model.max_fire_area - hose_UAV_fire_model.extinguished_area > 0) and (fire_power >= 0):
 
             # Развитие пожара до начала тушения
-            if time < self.time_extinguishing_start:
+            if time < self.time_extinguishing_start * 60:
                 y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
                 fire_power = y[-1]
                 time += 1
@@ -431,23 +471,23 @@ class GUI(QMainWindow):
                 time += 1
 
 
-        hose_UAV_fire_extinguishing_time = time - self.time_extinguishing_start
+        hose_UAV_fire_extinguishing_time = time - (self.time_extinguishing_start * 60)
         self.hose_UAV_fire_extinguishing_time_label.setText(f"Пожар потушен за {hose_UAV_fire_extinguishing_time // 60} мин {hose_UAV_fire_extinguishing_time % 60} сек")
         self.hose_UAV_fire_extinguishing_time_label.setStyleSheet('background-color: lightgreen')
+        self.hose_UAV_efficiency_label.setText(f"Эффективность: {round(EA_power / ((hose_uav_model.payload + hose_uav_model.mass) * hose_UAV_fire_extinguishing_time))} Дж/кг*с")
 
         x = np.linspace(0, time, time)
         return x, y
 
     def tank_UAV_fire_extinguishing_simulation(self):
-        from UAV_model import UAV
         
         # Инициализация переменных
-        tank_UAV_model = UAV(self.tank_UAV_id) # создать список дронов
-        EA_model = EA(1, self.tank_UAV_hose_id, height_init = self.height) 
+        tank_UAV_model = UAV(self.tank_UAV_id) 
+        EA_model = EA(1, self.tank_UAV_hose_id) 
         EA_power = EA_model.HeatAbsorption()
         time = 0
         current_flight_time = 0
-        time_start = self.time_extinguishing_start + tank_UAV_model.service_time() + tank_UAV_model.lift_time(self.height) 
+        time_start = (self.time_extinguishing_start * 60) + tank_UAV_model.service_time() + tank_UAV_model.lift_time(self.height) 
         fire_power = 0
         y = np.array([])
         tank_UAV_fire_model = FireModel(self.building_id, self.area)
@@ -460,14 +500,19 @@ class GUI(QMainWindow):
             
             # Тушение пожара
             UAV_EA_volume = tank_UAV_model.payload / EA_model.EA_density
-            for i in range (round(UAV_EA_volume / EA_model.EAConsumption())):
+            time_extinguishing = round(UAV_EA_volume / EA_model.EAConsumption())
+            if time_extinguishing == 0:
+                time_extinguishing = 1
+            
+            for i in range (time_extinguishing):
                 y = np.append(y, tank_UAV_fire_model.fire_calculate(time))
                 fire_power = y[-1]
                 fire_power_per_meter = fire_power / (self.area - tank_UAV_fire_model.extinguished_area)
                 if (tank_UAV_fire_model.max_fire_area - tank_UAV_fire_model.extinguished_area <= 0) or (fire_power) < 0:
-                    tank_UAV_fire_extinguishing_time = time - self.time_extinguishing_start
+                    tank_UAV_fire_extinguishing_time = time - (self.time_extinguishing_start * 60)
                     self.tank_UAV_fire_extinguishing_time_label.setStyleSheet("background-color: lightgreen")
                     self.tank_UAV_fire_extinguishing_time_label.setText(f"Пожар потушен за {tank_UAV_fire_extinguishing_time // 60} мин {tank_UAV_fire_extinguishing_time % 60} сек")
+                    self.tank_UAV_efficiency_label.setText(f"Эффективность: {round(EA_power / ((tank_UAV_model.payload + tank_UAV_model.mass) * tank_UAV_fire_extinguishing_time))} Дж/кг*с")
                     time += 1
                     x = np.linspace(0, time, time)
                     return x, y
@@ -503,7 +548,6 @@ class GUI(QMainWindow):
                 time += 1
                 y = np.append(y, fire_power + power_free_burn)
 
-
             if (tank_UAV_model.flight_time * 60) < (current_flight_time + tank_UAV_model.lift_time(self.height) + tank_UAV_model.descend_time(self.height)):
                 for i in range (tank_UAV_model.service_time()):
                     fire_power = tank_UAV_fire_model.fire_calculate(time)
@@ -512,7 +556,6 @@ class GUI(QMainWindow):
                     time += 1
                     y = np.append(y, fire_power + power_free_burn)
                 current_flight_time = 0
-                
 
             # Подъём дрона
             for i in range (tank_UAV_model.lift_time(self.height)):
@@ -523,9 +566,15 @@ class GUI(QMainWindow):
                 current_flight_time += 1
                 y = np.append(y, fire_power + power_free_burn)
             tank_UAV_fire_model.extinguished_area -= natural_fire_model.fire_area
-        
-        self.tank_UAV_fire_extinguishing_time_label.setText("Пожар не потушен")
-        self.tank_UAV_fire_extinguishing_time_label.setStyleSheet('background-color: lightcoral')
 
+        if (tank_UAV_fire_model.max_fire_area - tank_UAV_fire_model.extinguished_area > 0) and (fire_power)  >= 0:
+            self.tank_UAV_fire_extinguishing_time_label.setText("Пожар не потушен")
+            self.tank_UAV_fire_extinguishing_time_label.setStyleSheet('background-color: lightcoral')
+        else:
+            tank_UAV_fire_extinguishing_time = time - (self.time_extinguishing_start * 60)
+            self.tank_UAV_fire_extinguishing_time_label.setText(f"Пожар потушен за {tank_UAV_fire_extinguishing_time // 60} мин {tank_UAV_fire_extinguishing_time % 60} сек")
+            self.tank_UAV_fire_extinguishing_time_label.setStyleSheet("background-color: lightgreen")
+            self.tank_UAV_efficiency_label.setText(f"Эффективность: {round(EA_power / ((tank_UAV_model.payload + tank_UAV_model.mass) * tank_UAV_fire_extinguishing_time))} Дж/кг*с")
+         
         x = np.linspace(0, time, time)
         return x, y        

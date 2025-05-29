@@ -3,12 +3,13 @@ from sqlalchemy import create_engine, Column, Integer, Float, String, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import sqlalchemy
+from db_module import get_db_path
 
 Base = sqlalchemy.orm.declarative_base()
 
 class DataBase_data:
       
-    engine = create_engine('sqlite:///databases/DroneFireModel.db', echo = False)
+    engine = create_engine(f"sqlite:///{get_db_path()}", echo=False)
     Session = sessionmaker(bind=engine)
     session = Session()
 
@@ -19,7 +20,6 @@ class DataBase_data:
         mass = Column(Integer)
         payload = Column(Integer)
         flight_time = Column(Integer)
-        # UAV_hose_id = Column(Float) # ввести в БД
 
     class FIRE_HOSE_specification(Base):
         __tablename__ = 'FIRE_HOSE_specification'
@@ -69,11 +69,7 @@ class DataBase_data:
             return getattr(record, attribute)
         else:
             print ("Record ", tablename, 'id=', id, ' case=', attribute, " not found")
+           
             
-            
-        
-    
     def close_session(self):
         self.session.close()
-
-

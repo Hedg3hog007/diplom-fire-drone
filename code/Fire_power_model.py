@@ -21,6 +21,7 @@ class FireModel:
         self.time_max_power = ((2 * self.max_fire_area/(math.pi * self.flame_spread ** 2)) ** (1 / 2))
         self.time_burnout = (self.fire_load_specific_mass / self.burnout_speed)
         self.extinguished_area = 0
+        self.fire_area = 0
 
     def fire_spread(self,  time: int):
         self.fire_area = math.pi / 2 * (self.flame_spread * time) ** 2  -  self.extinguished_area    
