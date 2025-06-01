@@ -36,26 +36,23 @@ class DataBase_data:
         heat_capacity = Column(Integer)
         density = Column(Integer)
         viscosity = Column(Integer)
-        vaporation_capacity = Column(Integer)
 
     class BUILDINGS_specification(Base):
         __tablename__ = 'BUILDINGS_specification'
         id = Column(Integer, primary_key=True)
         name = Column(String)
-        fire_load = Column(Integer)
         lower_heat_value = Column(Integer)
         flame_spread = Column(Float)
         burnout_speed = Column(Float)
         fire_load_specific_mass = Column(Integer)
-        coef_burn_completeness = Column(Float)
-        heat_capacity_per_meter = Column(Integer)
+        heat_capacity = Column(Integer)
 
     def __init__(self):
         self._models = {
-            'UAV_specification': self.UAV_specification,
-            'FIRE_HOSE_specification': self.FIRE_HOSE_specification,
-            'EA_specification': self.EA_specification,
-            'BUILDINGS_specification': self.BUILDINGS_specification
+            'Дроны': self.UAV_specification,
+            'Пожарные рукава': self.FIRE_HOSE_specification,
+            'Огнетушащие вещества': self.EA_specification,
+            'Помещения': self.BUILDINGS_specification
         }
 
     def record_get(self, tablename, id, attribute):
@@ -73,3 +70,40 @@ class DataBase_data:
             
     def close_session(self):
         self.session.close()
+
+    def add_record(self, tablename, **kwargs):
+        model_class = self._models.get(tablename)
+        if not model_class:
+            print('Table ', tablename, ' not found')
+            return None
+        record = model_class(**kwargs)
+        self.session.add(record)
+        self.session.commit()
+        return record
+
+    def update_record(self, tablename, id, **kwargs):
+        model_class = self._models.get(tablename)
+        if not model_class:
+            print('Table ', tablename, ' not found')
+            return None
+        record = self.session.query(model_class).filter_by(id=id).first()
+        if not record:
+            print('Record not found')
+            return None
+        for key, value in kwargs.items():
+            setattr(record, key, value)
+        self.session.commit()
+        return record
+
+    def delete_record(self, tablename, id):
+        model_class = self._models.get(tablename)
+        if not model_class:
+            print('Table ', tablename, ' not found')
+            return False
+        record = self.session.query(model_class).filter_by(id=id).first()
+        if not record:
+            print('Record not found')
+            return False
+        self.session.delete(record)
+        self.session.commit()
+        return True
