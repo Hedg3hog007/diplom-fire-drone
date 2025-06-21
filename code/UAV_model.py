@@ -11,8 +11,8 @@ class UAV:
         self.mass = self.db.record_get(self.UAV_spec_table, UAV_id_init, 'mass')
         self.payload = self.db.record_get(self.UAV_spec_table, UAV_id_init, 'payload')
         self.flight_time = self.db.record_get(self.UAV_spec_table, UAV_id_init, 'flight_time')
-        self.lift_velocity = 4 # заглушка
-        self.descend_velocity = 3 # заглушка
+        self.lift_velocity = 4 
+        self.descend_velocity = 4 
         
 
     def lift_time(self, height: int):
@@ -24,10 +24,10 @@ class UAV:
         return round(descend_time)
     
     def service_time(self):
-        return 150
+        return 210          # Время обслуживания 3.5 минуты
     
     def EA_refill_time(self):
-        EA_refill_time = self.payload / 30 # заправка 30 л/с
+        EA_refill_time = self.payload / 7 # заправка 7 л/с
         return round(EA_refill_time)
     
 

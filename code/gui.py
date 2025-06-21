@@ -1,15 +1,16 @@
 # gui.py
 from PyQt5.QtWidgets import QMainWindow, QTabWidget, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QLabel, QComboBox, QLineEdit, QTableWidget, QTableWidgetItem, QPushButton, QInputDialog, QMessageBox
+from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from DroneFireModel import DataBase_data
 from Fire_power_model import FireModel
-from Fire_hose_model import Fire_hose
 from UAV_model import UAV
 from EA_model import EA
+import math
 import random
 import numpy as np
-
+g = 9.81
 
 
 class DebugTab(QWidget):
@@ -72,6 +73,117 @@ class DebugTab(QWidget):
         self.coef_canvas.draw()
         self.fric_canvas.draw()
         self.cons_canvas.draw()
+
+class SimulationTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+
+        self.simulation_figure = Figure(figsize=(5, 4), dpi=100)
+        self.simulation_canvas = FigureCanvas(self.simulation_figure)
+        layout.addWidget(self.simulation_canvas)
+        self.simulation_ax = self.simulation_figure.add_subplot(111)
+        self.simulation_ax.set_title("Зависимость времени тушения от высоты")
+        self.simulation_ax.set_xlabel("Высота (м)")
+        self.simulation_ax.set_ylabel("Время тушения (с)")
+        
+
+        self.simulation_btn = QPushButton("Симуляция")
+        self.simulation_btn.clicked.connect(lambda: self.simulate(parent))
+        layout.addWidget(self.simulation_btn)
+
+    
+    def simulate(self, parent):
+        self.height = parent.height
+
+        self.simulation_ax.clear()
+        self.simulation_ax.set_title("Зависимость времени тушения от высоты")
+        self.simulation_ax.set_xlabel("Высота (м)")
+        self.simulation_ax.set_ylabel("Время тушения (с)")
+
+        for drone_id in range(1, len(parent.UAV_names) + 1, 1):
+            x, y = self.hose_drone_simulate(drone_id, parent)
+            self.simulation_ax.plot(x, y, label=parent.UAV_names[drone_id-1])
+
+            x, y = self.tank_drone_simulate(drone_id, parent)
+            self.simulation_ax.plot(x,y, label=f'{parent.UAV_names[drone_id-1]} (бортовой резервуар)')
+
+
+        parent.height = self.height
+        self.simulation_ax.legend(loc = 'upper left')
+        self.simulation_ax.relim()
+        self.simulation_ax.set_xlim(1, parent.height)
+        self.simulation_ax.autoscale_view()
+        self.simulation_canvas.draw()
+
+        parent.selected_hose_UAV = parent.hose_UAV_combobox.currentText()
+        record = parent.db.session.query(parent.UAV_tablename).filter_by(name = parent.selected_hose_UAV).first()
+        parent.hose_UAV_id = getattr(record, 'id')
+        parent.hose_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
+        parent.hose_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
+        parent.hose_UAV_flight_time_label.setText(f"Время полёта: {record.flight_time} мин")
+
+        parent.selected_tank_UAV = parent.tank_UAV_combobox.currentText()
+        record = parent.db.session.query(parent.UAV_tablename).filter_by(name = parent.selected_tank_UAV).first()
+        parent.tank_UAV_id = getattr(record, 'id')
+        parent.tank_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
+        parent.tank_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
+        parent.tank_UAV_flight_time_label.setText(f"Время полёта: {record.flight_time} мин")
+
+        parent.selected_hose_UAV_hose = parent.hose_UAV_hose_combobox.currentText()
+        record = parent.db.session.query(parent.hose_tablename).filter_by(name = parent.selected_hose_UAV_hose).first()
+        parent.hose_UAV_hose_id = getattr(record, 'id')
+
+
+
+    
+    def hose_drone_simulate(self, drone_id, parent):
+            y = np.array([])
+            parent.hose_UAV_id = drone_id
+            hose_drone = UAV(drone_id)
+            parent.height = 1
+
+            for hose_id in range(1, len(parent.hose_names), 1):
+                parent.hose_UAV_hose_id = hose_id
+                ea = EA(1, hose_id)
+                ea_weight_per_meter = ea.weight_per_meter()
+
+                while hose_drone.payload > ea_weight_per_meter * parent.height:
+                    t_ext = parent.hose_UAV_fire_extinguishing_simulation()[0][-1] - (parent.time_extinguishing_start * 60)
+                    if t_ext == 1:
+                        x = np.linspace(1, len(y), len(y))
+                        return x, y   
+                    y = np.append(y, t_ext)
+                    parent.height += 1
+            
+            x = np.linspace(1, len(y), len(y))
+            return x, y    
+
+    def tank_drone_simulate(self, drone_id, parent):
+            y = np.array([])
+            parent.tank_UAV_id = drone_id
+            tank_drone = UAV(drone_id)
+            parent.EA_consumption_tank = round(tank_drone.payload / 20)
+            parent.height = 1
+            fire = FireModel(parent.building_id, parent.area)
+            time_check = True
+            time_limit = round(fire.time_burnout + fire.time_max_power)
+
+            while time_check == True:
+                t_ext = parent.tank_UAV_fire_extinguishing_simulation()[0][-1]
+                if t_ext == 1 or t_ext == 0 or (t_ext > time_limit):
+                    time_check = False
+                    x = np.linspace(1, len(y), len(y))
+                    return x, y
+                y = np.append(y, t_ext - parent.time_extinguishing_start * 60)
+                parent.height += 1
+            
+            x = np.linspace(1, len(y), len(y))
+            return x, y
+
+
+            
+
 
 class DatabaseTab(QWidget):
     def __init__(self, parent=None):
@@ -196,6 +308,7 @@ class GUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Динамическая модель тушения пожаров")
         self.setGeometry(100, 100, 1800, 900)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 
         # Создание QTabWidget
         self.tabs = QTabWidget()
@@ -204,15 +317,6 @@ class GUI(QMainWindow):
         # Главная вкладка (ваш основной интерфейс)
         self.main_widget = QWidget()
         self.tabs.addTab(self.main_widget, "Главное окно")
-
-        # Вкладка для отладки
-        self.debug_tab = DebugTab(self)
-        self.tabs.addTab(self.debug_tab, "Отладка")
-        self.layout = QHBoxLayout(self.main_widget)
-
-        # Вкладка для базы данных
-        self.database_tab = DatabaseTab(self)
-        self.tabs.addTab(self.database_tab, "База данных")
 
         # График интенсивности пожара
         self.left_layout = QVBoxLayout()
@@ -225,6 +329,7 @@ class GUI(QMainWindow):
         self.ax_fire.set_xlabel("Время (с)")
         self.ax_fire.set_ylabel("Интенсивность пожара (Дж)")
         self.left_layout.addWidget(self.canvas_fire)
+        self.layout = QHBoxLayout(self.main_widget)
         self.layout.addLayout(self.left_layout)
 
         # График интенсивности тушения
@@ -292,7 +397,18 @@ class GUI(QMainWindow):
         self.create_tank_UAV_hose_combobox()
         self.create_tank_UAV_combobox()
         self.create_hose_UAV_combobox()
-        self.chart_time_by_consumption() #График зависимости времени тушения от расхода для бортового ОТВ
+
+        # Вкладка симуляции
+        self.simulation_tab = SimulationTab(self)
+        self.tabs.addTab(self.simulation_tab, "Результаты")
+
+        # Вкладка отладки
+        self.debug_tab = DebugTab(self)
+        self.tabs.addTab(self.debug_tab, "Отладка")
+
+        # Вкладка базы данных
+        self.database_tab = DatabaseTab(self)
+        self.tabs.addTab(self.database_tab, "База данных")
 
     def create_input_layout(self):
         self.parameters_layout = QVBoxLayout()
@@ -512,7 +628,7 @@ class GUI(QMainWindow):
         # Обновление ID выбранного дрона по имени
         record = self.db.session.query(self.UAV_tablename).filter_by(name = self.selected_tank_UAV_hose).first()
         self.tank_UAV_id = getattr(record, 'id')
-        self.EA_consumption_tank = round(getattr(record, 'payload') / 20)
+        self.EA_consumption_tank = round(getattr(record, 'mass') / 20)
         self.consumption_slider.setValue(self.EA_consumption_tank)
         self.tank_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
         self.tank_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
@@ -556,6 +672,9 @@ class GUI(QMainWindow):
 
         # Обновление графика времени тушения от расхода бортовой БАС
         self.chart_time_by_consumption()
+        self.ax_time_by_consumption.set_title("Время тушения от расхода для бортовой БАС")
+        self.ax_time_by_consumption.set_ylabel("Время тушения (с)")
+        self.ax_time_by_consumption.set_xlabel("Расход воды (л/с)")
         self.ax_time_by_consumption.legend(loc = 'lower left')
         self.ax_time_by_consumption.relim()
         self.ax_time_by_consumption.autoscale_view()
@@ -576,14 +695,15 @@ class GUI(QMainWindow):
         self.ax_fire.plot(x_ext, y_ext, label="прицепной рукав")
         self.ax_fire.plot(x_ext_tank_uav, y_ext_tank_uav, label="бортовой резервуар")
 
-        self.ax_fire.legend(loc = 'upper right')
+        self.ax_fire.legend(loc = 'upper left')
         self.ax_fire.relim()
         self.ax_fire.autoscale_view()
+        ymin, ymax = self.ax_fire.get_ylim()
+        self.ax_fire.set_ylim(ymin, ymax * 1.3)
         self.canvas_fire.draw()
 
         # Обновление графика интенсивности тушения
         heights = np.linspace(0, self.height, self.height)
-                
         self.ax_hose.clear()
         self.ax_hose.set_title("Интенсивность тушения от высоты для прицепного рукава")
         self.ax_hose.set_xlabel("Высота тушения (м)")
@@ -603,9 +723,20 @@ class GUI(QMainWindow):
         
     def calculate_hose_intensities(self, heights, hose_id):
         ea_model = EA(1, hose_id)
+        uav_model = UAV(self.hose_UAV_id)
+        weight = 0
         intensities = []
         for h in heights:
-            intensities.append(ea_model.HeatAbsorption())
+            weight += ea_model.weight_per_meter()
+            if weight > uav_model.payload:
+                intensities.append(0)
+        
+            hose_uav_force = uav_model.payload * g * 1.15
+            remain_jet_reaction_force = math.sqrt((hose_uav_force) ** 2 - (weight * g ) ** 2)
+            if (hose_uav_force) / remain_jet_reaction_force >= 2:
+                remain_jet_reaction_force = (uav_model.payload * g) / math.cos(math.radians(30))    # Угол наклона дрона не более 30 градусов
+            ea_consumption = remain_jet_reaction_force / math.sqrt(2 * ea_model.EA_density * ea_model.pressure)
+            intensities.append(ea_model.HeatAbsorption_by_consumption(ea_consumption))
 
         return intensities 
 
@@ -634,8 +765,7 @@ class GUI(QMainWindow):
         weight = 0
         ea_model = EA(1, self.hose_UAV_hose_id)
         hose_uav_model = UAV(self.hose_UAV_id)
-        hose_model = Fire_hose(self.hose_UAV_hose_id)
-        
+                
         for i in range (self.height):
             weight += ea_model.weight_per_meter()
         if weight > hose_uav_model.payload:
@@ -644,11 +774,18 @@ class GUI(QMainWindow):
             x = np.linspace(0, time, time)
             return x, y
         for i in range (self.height):
-            EA_power = ea_model.HeatAbsorption()
-
+            ea_model.EAConsumption()
+        
+        
+        hose_uav_force = hose_uav_model.payload * g * 1.15
+        remain_jet_reaction_force = math.sqrt((hose_uav_force) ** 2 - (weight * g ) ** 2)
+        if (hose_uav_force) / remain_jet_reaction_force >= 2:
+            remain_jet_reaction_force = (hose_uav_model.payload * g) / math.cos(math.radians(30))    # Угол наклона дрона не более 30 градусов
+        ea_consumption = remain_jet_reaction_force / math.sqrt(2 * ea_model.EA_density * ea_model.pressure)
+        EA_power = ea_model.HeatAbsorption_by_consumption(ea_consumption)
+        
         hose_UAV_fire_model = FireModel(self.building_id, self.area)
         
-
         # Моделирование тушения
         while (hose_UAV_fire_model.max_fire_area - hose_UAV_fire_model.extinguished_area > 0) and (fire_power >= 0):
 
@@ -674,6 +811,7 @@ class GUI(QMainWindow):
                 else:
                     self.hose_UAV_fire_extinguishing_time_label.setStyleSheet("background-color: lightcoral")
                     self.hose_UAV_fire_extinguishing_time_label.setText("Пожар не потушен")
+                    self.hose_UAV_efficiency_label.setText("")
                     time += 1
                     x = np.linspace(0, time, time)
                     return x, y
@@ -694,8 +832,8 @@ class GUI(QMainWindow):
         tank_UAV_model = UAV(self.tank_UAV_id) 
         tank_UAV_fire_model = FireModel(self.building_id, self.area)
         EA_model = EA(1, 1)
-        EA_consumption = self.EA_consumption_tank / 1000 # Расход в м3/с
-        EA_power = EA_model.HeatAbsorption_tank(EA_consumption)
+        EA_consumption = self.EA_consumption_tank / 1000 # Расход м3/с
+        EA_power = EA_model.HeatAbsorption_by_consumption(EA_consumption)
         time = 0
         fire_power = 0
         y = np.array([])
@@ -834,7 +972,13 @@ class GUI(QMainWindow):
             self.tank_UAV_id = j + 1
             self.time_by_consumption = self.dependence_time_by_consumption()
             self.ax_time_by_consumption.plot(self.time_by_consumption[0], self.time_by_consumption[1], label=f"{self.UAV_names[j].name}")
-        self.tank_UAV_id = 1
+        
+        self.selected_tank_UAV = self.tank_UAV_combobox.currentText()
+        record = self.db.session.query(self.UAV_tablename).filter_by(name = self.selected_tank_UAV).first()
+        self.tank_UAV_id = getattr(record, 'id')
+        self.tank_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
+        self.tank_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
+        self.tank_UAV_flight_time_label.setText(f"Время полёта: {record.flight_time} мин")
 
     def dependence_time_by_consumption(self):
         max_consumption = 20
@@ -850,7 +994,6 @@ class GUI(QMainWindow):
         self.ax_time_by_UAS.clear()
         self.ax_time_by_UAS.set_title("Время тушения БАС с пожарным рукавом")
         self.ax_time_by_UAS.set_ylabel("Время тушения (с)")
-        self.ax_time_by_UAS.set_xlabel("Конфигурация (Дрон / Рукав)")
 
         # Получить данные
         configs, times = self.time_by_UAS_hist()
@@ -877,13 +1020,15 @@ class GUI(QMainWindow):
             except Exception:
                 t = 0
             
+            if t == 1:
+                t = 0
             uav_name = self.UAV_names[uav_idx].name
             hose_name = self.hose_names[self.hose_UAV_hose_id - 1]
             configs.append(f"{uav_name} / {hose_name}")
             times.append(t)
         
-        self.selected_hose_UAV_hose = self.hose_UAV_combobox.currentText()
-        record = self.db.session.query(self.UAV_tablename).filter_by(name = self.selected_hose_UAV_hose).first()
+        self.selected_hose_UAV = self.hose_UAV_combobox.currentText()
+        record = self.db.session.query(self.UAV_tablename).filter_by(name = self.selected_hose_UAV).first()
         self.hose_UAV_id = getattr(record, 'id')
         self.hose_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
         self.hose_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
@@ -893,4 +1038,3 @@ class GUI(QMainWindow):
         record = self.db.session.query(self.hose_tablename).filter_by(name = self.selected_hose_UAV_hose).first()
         self.hose_UAV_hose_id = getattr(record, 'id')
         return configs, times
-    

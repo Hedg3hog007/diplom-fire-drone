@@ -19,7 +19,7 @@ class EA:
         self.EA_HeatCapacity = self.db.record_get(self.EA_table, EA_id_init, 'heat_capacity')
         self.temperature_start = 20     
         self.temperature_boiling = 100  
-        self.length = 0.5
+        self.length = 1                 # Шаг длины при расчёте потерь давления
         
     def EAConsumption (self):
         fire_hose = Fire_hose(self.fire_hose_id)
@@ -60,6 +60,6 @@ class EA:
             
         return fire_hose.Reynolds, fire_hose.friction_coef, friction_loss, EAConsumption
 
-    def HeatAbsorption_tank(self, consumption):
+    def HeatAbsorption_by_consumption(self, consumption):
         HeatAbsorption = consumption * self.EA_density * (self.EA_HeatCapacity * (self.temperature_boiling - self.temperature_start))
         return HeatAbsorption
