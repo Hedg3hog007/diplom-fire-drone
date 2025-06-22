@@ -28,6 +28,4 @@ class UAV:
     
     def EA_refill_time(self):
         EA_refill_time = self.payload / 7 # заправка 7 л/с
-        return round(EA_refill_time)
-    
-
+        return round(EA_refill_time)    

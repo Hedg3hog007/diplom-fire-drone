@@ -12,7 +12,6 @@ import random
 import numpy as np
 g = 9.81
 
-
 class DebugTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -83,7 +82,7 @@ class SimulationTab(QWidget):
         self.simulation_canvas = FigureCanvas(self.simulation_figure)
         layout.addWidget(self.simulation_canvas)
         self.simulation_ax = self.simulation_figure.add_subplot(111)
-        self.simulation_ax.set_title("Зависимость времени тушения от высоты")
+        self.simulation_ax.set_title(f"{parent.buildings_names[parent.building_id - 1].name}, {parent.area}м2, высота {parent.height}м ")
         self.simulation_ax.set_xlabel("Высота (м)")
         self.simulation_ax.set_ylabel("Время тушения (с)")
         
@@ -334,11 +333,23 @@ class GUI(QMainWindow):
         self.ax_hose = self.figure_hose.add_subplot(111)
         self.right_layout.addWidget(self.canvas_hose)
 
-        # Гистограмма времени тушения от конфигурации БАС
+        # Сводная таблица результатов тушения конфигураций БАС
+        self.results_layout = QVBoxLayout()
+        self.layout.addLayout(self.results_layout)
         self.figure_time_by_UAS = Figure(figsize=(8, 4), dpi=100)
         self.canvas_time_by_UAS = FigureCanvas(self.figure_time_by_UAS)
+        # Добавляем в лэйаут
         self.ax_time_by_UAS = self.figure_time_by_UAS.add_subplot(111)
-        self.layout.addWidget(self.canvas_time_by_UAS)
+        self.results_layout.addWidget(self.canvas_time_by_UAS)
+
+        # Сводная таблица мультипликативной свёртки конфигураций БАС
+        self.figure_convolution_by_UAS = Figure(figsize=(8, 4), dpi=100)
+        self.canvas_convolution_by_UAS = FigureCanvas(self.figure_convolution_by_UAS)
+        # Добавляем в лэйаут
+        self.ax_convolution_by_UAS = self.figure_convolution_by_UAS.add_subplot(111)
+        self.ax_convolution_by_UAS.set_title("Матричная таблица мультипликативной свёртки t^1.2 * m^0.9")
+        self.results_layout.addWidget(self.canvas_time_by_UAS)
+
 
         #График времени тушения от расхода бортовой БАС
         self.figure_time_by_consumption = Figure(figsize=(6, 4), dpi=100)
@@ -351,7 +362,7 @@ class GUI(QMainWindow):
 
         # Инициализация начальных параметров
         self.area = 60  # Начальная площадь помещения
-        self.height = 100 # Начальная высота тушения
+        self.height = 20 # Начальная высота тушения
         self.EA_consumption_tank = 11 # Расход воды бортовой БАС (л/с)
         self.time_extinguishing_start = random.randint(8, 13)  # Начальное время тушения
         self.db = DataBase_data()
@@ -669,23 +680,29 @@ class GUI(QMainWindow):
         self.ax_time_by_consumption.set_title("Время тушения от расхода для бортовой БАС")
         self.ax_time_by_consumption.set_ylabel("Время тушения (с)")
         self.ax_time_by_consumption.set_xlabel("Расход воды (л/с)")
-        self.ax_time_by_consumption.legend(loc = 'upper left')
+        self.ax_time_by_consumption.legend(loc = 'lower left')
         self.ax_time_by_consumption.relim()
         self.ax_time_by_consumption.autoscale_view()
         self.canvas_time_by_consumption.draw()
         
-        #Обновление гистограммы времени тушения
+        #Обновление сводной таблицы результатов тушения для БАС с прицепным пожарным рукавом
         self.chart_time_by_UAS()
-        self.ax_time_by_UAS.relim()
+        self.figure_time_by_UAS.subplots_adjust(top=0.8)
+        self.ax_time_by_UAS.set_title(f"Результаты тушения {self.buildings_names[self.building_id - 1].name}, {self.area}м2, высота {self.height}м")
         self.ax_time_by_UAS.autoscale_view()
         self.canvas_time_by_UAS.draw()
+
+        #Обновление сводной таблицы мультипликативной свёртки конфигураций БАС
+        self.figure_convolution_by_UAS.subplots_adjust(top=0.8)
+        self.ax_convolution_by_UAS.set_title("Мультипликативная свёртка t^1.2 * m^0.9")
+        self.ax_convolution_by_UAS.autoscale_view()
 
         # Обновление графика интенсивности тушения
         heights = np.linspace(0, self.height, self.height)
         self.ax_hose.clear()
-        self.ax_hose.set_title("Время тушения от высоты для прицепного рукава")
+        self.ax_hose.set_title(f"Расход воды от высоты для {self.UAV_names[self.hose_UAV_id - 1].name}")
         self.ax_hose.set_xlabel("Высота тушения (м)")
-        self.ax_hose.set_ylabel("Время тушения (с)")
+        self.ax_hose.set_ylabel("Расход (м3/с)")
 
         hose_id = self.hose_UAV_hose_id
         for i in range (len(self.hose_names)):
@@ -693,7 +710,7 @@ class GUI(QMainWindow):
             self.ax_hose.plot(heights, intensities, label = self.hose_names[i])
         self.hose_UAV_hose_id = hose_id
 
-        self.ax_hose.legend(loc = 'upper left')
+        self.ax_hose.legend(loc = 'upper right')
         self.ax_hose.relim()
         self.ax_hose.autoscale_view()
         ymin, ymax = self.ax_hose.get_ylim()
@@ -1005,50 +1022,171 @@ class GUI(QMainWindow):
         return consumption_values, time
     
     def chart_time_by_UAS(self):
+        import matplotlib.pyplot as plt
         self.ax_time_by_UAS.clear()
-        self.ax_time_by_UAS.set_title("Время тушения БАС с пожарным рукавом")
-        self.ax_time_by_UAS.set_ylabel("Время тушения (с)")
+        self.ax_time_by_UAS.axis('off')
+        self.ax_convolution_by_UAS.clear()
+        self.ax_convolution_by_UAS.axis('off')
 
-        # Получить данные
-        configs, times = self.time_by_UAS_hist()
-        x = np.arange(len(configs))
-        self.ax_time_by_UAS.bar(x, times, tick_label=configs)
-        self.ax_time_by_UAS.set_xticklabels(configs, rotation=45, ha='right')
+        hose_id = self.hose_UAV_hose_id
+        hose_UAV_id = self.hose_UAV_id
+        headers, hose_names, times, masses, ratios, convs, conv_matrix = self.time_by_UAS()
+        self.hose_UAV_id = hose_UAV_id
+        self.hose_UAV_hose_id = hose_id
+
+        n_cols = len(headers)
+        def pad_row(row):
+            return row + ["—"] * (n_cols - len(row))
+
+        # Основная таблица
+        cell_text = [
+            pad_row(headers),
+            pad_row(hose_names),
+            pad_row(times),
+            pad_row(masses),
+            pad_row(ratios)
+        ]
+        row_labels = [
+            "Название дрона",
+            "Лучший рукав",
+            "Время тушения (с)",
+            "Масса системы (кг)",
+            "Время/масса (с/кг)"
+        ]
+        table = self.ax_time_by_UAS.table(
+            cellText=cell_text,
+            rowLabels=row_labels,
+            loc='center'
+        )
+        for key, cell in table.get_celld().items():
+            cell.set_text_props(ha="center")
+            cell.set_text_props(va="center")
         self.figure_time_by_UAS.tight_layout()
+        self.canvas_time_by_UAS.draw()
 
-    def time_by_UAS_hist(self):
-        configs = []
+        if self.canvas_convolution_by_UAS not in [self.results_layout.itemAt(i).widget() for i in range(self.results_layout.count()) if self.results_layout.itemAt(i).widget()]:
+            self.results_layout.addWidget(self.canvas_convolution_by_UAS)
+
+        # Таблица мультипликативной свёртки: строки — рукава, столбцы — дроны
+        conv_row_labels = [name for name in self.hose_names]
+        conv_col_labels = [name.name for name in self.UAV_names]
+        # Транспонируем матрицу
+        conv_cell_text = [[str(conv_matrix[row][col]) for row in range(len(conv_matrix))] for col in range(len(conv_matrix[0]))]
+
+        self.ax_convolution_by_UAS.clear()
+        self.ax_convolution_by_UAS.axis('off')
+        conv_table_obj = self.ax_convolution_by_UAS.table(
+            cellText=conv_cell_text,
+            rowLabels=conv_row_labels,
+            colLabels=conv_col_labels,
+            loc='center'
+        )
+        for key, cell in conv_table_obj.get_celld().items():
+            cell.set_text_props(ha="center")
+            cell.set_text_props(va="center")
+        self.figure_convolution_by_UAS.tight_layout()
+        self.canvas_convolution_by_UAS.draw()
+
+    def time_by_UAS(self):
+        # Возвращает данные для таблицы
+        headers = []
+        hose_names = []
         times = []
-        t = 0
+        masses = []
+        ratios = []
+        convs = []
+        conv_matrix = []
+
+        # Для таблицы мультипликативной свёртки
+        all_times = []
+        all_masses = []
+
         for uav_idx in range(len(self.UAV_names)):
+            uav_name = self.UAV_names[uav_idx].name
             self.hose_UAV_id = uav_idx + 1
             hose_UAV = UAV(self.hose_UAV_id)
-            self.hose_UAV_hose_id = 1
-            ea = EA(1, self.hose_UAV_hose_id)
 
-            while (self.hose_UAV_hose_id < len(self.hose_names)) and (hose_UAV.payload < (ea.weight_per_meter() * self.height)):
-                self.hose_UAV_hose_id += 1
+            min_time = None
+            best_hose_idx = None
+            best_time = None
+            best_mass = None
+
+            # Для строки мультипликативной свёртки по данному дрону
+            conv_row = []
+            times_row = []
+            masses_row = []
+
+            for hose_idx in range(len(self.hose_names)):
+                self.hose_UAV_hose_id = hose_idx + 1
                 ea = EA(1, self.hose_UAV_hose_id)
-            try:
-                t = self.hose_UAV_fire_extinguishing_simulation()[0][-1] - self.time_extinguishing_start * 60
-            except Exception:
-                t = 0
-            
-            if t == 1:
-                t = 0
-            uav_name = self.UAV_names[uav_idx].name
-            hose_name = self.hose_names[self.hose_UAV_hose_id - 1]
-            configs.append(f"{uav_name} / {hose_name}")
-            times.append(t)
-        
-        self.selected_hose_UAV = self.hose_UAV_combobox.currentText()
-        record = self.db.session.query(self.UAV_tablename).filter_by(name = self.selected_hose_UAV).first()
-        self.hose_UAV_id = getattr(record, 'id')
-        self.hose_UAV_mass_label.setText(f"Масса дрона: {record.mass} кг")
-        self.hose_UAV_payload_label.setText(f"Полезная нагрузка: {record.payload} кг")
-        self.hose_UAV_flight_time_label.setText(f"Время полёта: {record.flight_time} мин")
+                try:
+                    t = self.hose_UAV_fire_extinguishing_simulation()[0]
+                    if len(t) == 0:
+                        t_val = None
+                    else:
+                        t_val = t[-1] - self.time_extinguishing_start * 60
+                except Exception:
+                    t_val = None
+                # Масса системы для этой конфигурации
+                hose_mass = 0
+                for h in range(self.height):
+                    hose_mass += ea.weight_per_meter()
+                sys_mass = round(hose_UAV.mass + hose_mass, 1)
+                # Сохраняем для нормализации
+                if t_val is not None and t_val > 1:
+                    times_row.append(t_val)
+                    masses_row.append(sys_mass)
+                else:
+                    times_row.append(None)
+                    masses_row.append(None)
+                # Для основной таблицы ищем лучший рукав
+                if t_val is not None and t_val > 1:
+                    if (min_time is None) or (t_val < min_time):
+                        min_time = t_val
+                        best_hose_idx = hose_idx
+                        best_mass = sys_mass
+                        best_time = t_val
 
-        self.selected_hose_UAV_hose = self.hose_UAV_hose_combobox.currentText()
-        record = self.db.session.query(self.hose_tablename).filter_by(name = self.selected_hose_UAV_hose).first()
-        self.hose_UAV_hose_id = getattr(record, 'id')
-        return configs, times
+            # Для нормализации по всем конфигурациям
+            all_times.extend([t for t in times_row if t is not None])
+            all_masses.extend([m for m in masses_row if m is not None])
+
+            headers.append(uav_name)
+            if min_time is not None:
+                hose_names.append(self.hose_names[best_hose_idx])
+                times.append(str(int(best_time)))
+                masses.append(str(best_mass))
+                try:
+                    ratio = round(best_time / best_mass, 2)
+                except Exception:
+                    ratio = "-"
+                ratios.append(str(ratio))
+            else:
+                hose_names.append("Пожар не потушен")
+                times.append("—")
+                masses.append("—")
+                ratios.append("—")
+
+            conv_matrix.append((times_row, masses_row))
+
+        # Нормализация для мультипликативной свёртки
+        min_time = min(all_times) if all_times else 1
+        min_mass = min(all_masses) if all_masses else 1
+
+        # Заполняем conv_matrix значениями свёртки
+        conv_matrix_final = []
+        for times_row, masses_row in conv_matrix:
+            conv_row = []
+            for t_val, m_val in zip(times_row, masses_row):
+                if t_val is not None and m_val is not None:
+                    t_norm = (t_val / 60) / (min_time / 60)
+                    m_norm = m_val / min_mass
+                    conv = round((t_norm ** 1.2) * (m_norm ** 0.9), 2)
+                    conv_row.append(conv)
+                else:
+                    conv_row.append("—")
+            conv_matrix_final.append(conv_row)
+
+        convs = ["—"] * len(headers)
+
+        return headers, hose_names, times, masses, ratios, convs, conv_matrix_final

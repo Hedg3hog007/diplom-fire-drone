@@ -3,9 +3,9 @@
 
 a = Analysis(
     ['main.py'],
-    pathex=['c:\\Users\\ek655\\Desktop\\university\\Program\\test\\code'],
+    pathex=[],
     binaries=[],
-    datas=[('..\\databases\\DroneFireModel.db', 'databases')],
+    datas=[('C:\\\\Users\\\\ek655\\\\Desktop\\\\university\\\\Program\\\\databases\\\\DroneFireModel.db', 'databases')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
