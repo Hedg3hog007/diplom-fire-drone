@@ -110,7 +110,7 @@ class SimulationTab(QWidget):
 
 
         parent.height = self.height
-        self.simulation_ax.legend(loc = 'upper left')
+        self.simulation_ax.legend(loc = 'lower right')
         self.simulation_ax.relim()
         self.simulation_ax.set_xlim(1, parent.height)
         self.simulation_ax.autoscale_view()
@@ -135,8 +135,6 @@ class SimulationTab(QWidget):
         parent.hose_UAV_hose_id = getattr(record, 'id')
 
 
-
-    
     def hose_drone_simulate(self, drone_id, parent):
             y = np.array([])
             parent.hose_UAV_id = drone_id
@@ -180,10 +178,6 @@ class SimulationTab(QWidget):
             
             x = np.linspace(1, len(y), len(y))
             return x, y
-
-
-            
-
 
 class DatabaseTab(QWidget):
     def __init__(self, parent=None):
@@ -357,7 +351,7 @@ class GUI(QMainWindow):
 
         # Инициализация начальных параметров
         self.area = 60  # Начальная площадь помещения
-        self.height = 40 # Начальная высота тушения
+        self.height = 100 # Начальная высота тушения
         self.EA_consumption_tank = 11 # Расход воды бортовой БАС (л/с)
         self.time_extinguishing_start = random.randint(8, 13)  # Начальное время тушения
         self.db = DataBase_data()
@@ -675,7 +669,7 @@ class GUI(QMainWindow):
         self.ax_time_by_consumption.set_title("Время тушения от расхода для бортовой БАС")
         self.ax_time_by_consumption.set_ylabel("Время тушения (с)")
         self.ax_time_by_consumption.set_xlabel("Расход воды (л/с)")
-        self.ax_time_by_consumption.legend(loc = 'lower left')
+        self.ax_time_by_consumption.legend(loc = 'upper left')
         self.ax_time_by_consumption.relim()
         self.ax_time_by_consumption.autoscale_view()
         self.canvas_time_by_consumption.draw()
@@ -685,6 +679,26 @@ class GUI(QMainWindow):
         self.ax_time_by_UAS.relim()
         self.ax_time_by_UAS.autoscale_view()
         self.canvas_time_by_UAS.draw()
+
+        # Обновление графика интенсивности тушения
+        heights = np.linspace(0, self.height, self.height)
+        self.ax_hose.clear()
+        self.ax_hose.set_title("Время тушения от высоты для прицепного рукава")
+        self.ax_hose.set_xlabel("Высота тушения (м)")
+        self.ax_hose.set_ylabel("Время тушения (с)")
+
+        hose_id = self.hose_UAV_hose_id
+        for i in range (len(self.hose_names)):
+            intensities = self.calculate_hose_intensities(i + 1)
+            self.ax_hose.plot(heights, intensities, label = self.hose_names[i])
+        self.hose_UAV_hose_id = hose_id
+
+        self.ax_hose.legend(loc = 'upper left')
+        self.ax_hose.relim()
+        self.ax_hose.autoscale_view()
+        ymin, ymax = self.ax_hose.get_ylim()
+        self.ax_hose.set_ylim(ymin, ymax * 1.3)
+        self.canvas_hose.draw()
 
         # Обновление графика противодействия пожару
         x_ext, y_ext = self.hose_UAV_fire_extinguishing_simulation()
@@ -701,43 +715,38 @@ class GUI(QMainWindow):
         ymin, ymax = self.ax_fire.get_ylim()
         self.ax_fire.set_ylim(ymin, ymax * 1.3)
         self.canvas_fire.draw()
-
-        # Обновление графика интенсивности тушения
-        heights = np.linspace(0, self.height, self.height)
-        self.ax_hose.clear()
-        self.ax_hose.set_title("Интенсивность тушения от высоты для прицепного рукава")
-        self.ax_hose.set_xlabel("Высота тушения (м)")
-        self.ax_hose.set_ylabel("Интенсивность тушения (Дж/с)")
-
-        for i in range (len(self.hose_names)):
-            intensities = self.calculate_hose_intensities(heights, hose_id = i + 1)
-            self.ax_hose.plot(heights, intensities, label = self.hose_names[i])
-
-        max_fire_plot = np.linspace(self.max_fire_power, self.max_fire_power, len(heights))
-        self.ax_hose.plot(heights, max_fire_plot, label = "Макс. мощность пожара", linestyle='--', color='red')
-
-        self.ax_hose.legend(loc = 'upper left')
-        self.ax_hose.relim()
-        self.ax_hose.autoscale_view()
-        self.canvas_hose.draw()
         
-    def calculate_hose_intensities(self, heights, hose_id):
-        ea_model = EA(1, hose_id)
-        uav_model = UAV(self.hose_UAV_id)
-        weight = 0
+    def calculate_hose_intensities(self, hose_id):
+        self.hose_UAV_hose_id = hose_id
         intensities = []
-        for h in heights:
-            weight += ea_model.weight_per_meter()
-            if weight > uav_model.payload:
+        height = self.height
+        for h in range (height):
+            self.height = h
+            try:
+                weight = 0
+                ea_model = EA(1, self.hose_UAV_hose_id)
+                hose_uav_model = UAV(self.hose_UAV_id)
+                for i in range (self.height):
+                    weight += ea_model.weight_per_meter()
+                    ea_model.EAConsumption()
+                hose_uav_force = hose_uav_model.payload * g
+                naklon = 30         
+                remain_force = math.sqrt((hose_uav_force) ** 2 - (weight * g) ** 2)
+                jet_potential = hose_uav_force * math.sin(math.radians(naklon))
+                if jet_potential > remain_force:
+                    jet_potential = remain_force
+                pres_potential =  2 * jet_potential / (math.pi * ea_model.FireHose_diameter)
+                if pres_potential < ea_model.pressure:
+                    ea_model.pressure = pres_potential
+                try:
+                    ea_consumption = math.pi * (ea_model.FireHose_diameter / 2) ** 2 * math.sqrt(2 * ea_model.pressure / ea_model.EA_density)
+                except:
+                    ea_consumption = 0
+                intensities.append(ea_consumption)
+                # intensities.append(self.hose_UAV_fire_extinguishing_simulation()[0][-1] - self.time_extinguishing_start * 60)
+            except:
                 intensities.append(0)
-        
-            hose_uav_force = uav_model.payload * g * 1.15
-            remain_jet_reaction_force = math.sqrt((hose_uav_force) ** 2 - (weight * g ) ** 2)
-            if (hose_uav_force) / remain_jet_reaction_force >= 2:
-                remain_jet_reaction_force = (uav_model.payload * g) / math.cos(math.radians(30))    # Угол наклона дрона не более 30 градусов
-            ea_consumption = remain_jet_reaction_force / math.sqrt(2 * ea_model.EA_density * ea_model.pressure)
-            intensities.append(ea_model.HeatAbsorption_by_consumption(ea_consumption))
-
+        self.height = height
         return intensities 
 
     def natural_fire_spread(self):
@@ -773,49 +782,54 @@ class GUI(QMainWindow):
             self.hose_UAV_fire_extinguishing_time_label.setStyleSheet('background-color: lightcoral')
             x = np.linspace(0, time, time)
             return x, y
+        
+        # Расчёт мощности тушения с учётом силы реакции струи
         for i in range (self.height):
             ea_model.EAConsumption()
+        hose_uav_force = hose_uav_model.payload * g
+        naklon = 30         # Ограничение угла наклона дрона не более 30 градусов
+        remain_force = math.sqrt((hose_uav_force) ** 2 - (weight * g) ** 2)
+        jet_potential = hose_uav_force * math.sin(math.radians(naklon))
+        if jet_potential > remain_force:
+            jet_potential = remain_force
+        pres_potential =  2 * jet_potential / (math.pi * ea_model.FireHose_diameter)
+        if pres_potential < ea_model.pressure:
+            ea_model.pressure = pres_potential
+        try:
+            ea_consumption = math.pi * (ea_model.FireHose_diameter / 2) ** 2 * math.sqrt(2 * ea_model.pressure / ea_model.EA_density)
+        except:
+            ea_consumption = 0
         
-        
-        hose_uav_force = hose_uav_model.payload * g * 1.15
-        remain_jet_reaction_force = math.sqrt((hose_uav_force) ** 2 - (weight * g ) ** 2)
-        if (hose_uav_force) / remain_jet_reaction_force >= 2:
-            remain_jet_reaction_force = (hose_uav_model.payload * g) / math.cos(math.radians(30))    # Угол наклона дрона не более 30 градусов
-        ea_consumption = remain_jet_reaction_force / math.sqrt(2 * ea_model.EA_density * ea_model.pressure)
         EA_power = ea_model.HeatAbsorption_by_consumption(ea_consumption)
         
+        # Развитие пожара до начала тушения
         hose_UAV_fire_model = FireModel(self.building_id, self.area)
-        
+        while time < self.time_extinguishing_start * 60:
+            y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
+            fire_power = y[-1]
+            time += 1
         # Моделирование тушения
         while (hose_UAV_fire_model.max_fire_area - hose_UAV_fire_model.extinguished_area > 0) and (fire_power >= 0):
-
-            # Развитие пожара до начала тушения
-            if time < self.time_extinguishing_start * 60:
-                y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
-                fire_power = y[-1]
-                time += 1
-
-            # Тушение пожара
-            else:
-                y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
-                fire_power = y[-1]
-                fire_power_per_meter = fire_power / (self.area - hose_UAV_fire_model.extinguished_area)
-                if fire_power_per_meter < EA_power:
-                    burning_temperature = 800
-                    while burning_temperature > 350:
-                        delta_temperature = (EA_power - fire_power_per_meter) / (hose_UAV_fire_model.heat_capacity * hose_UAV_fire_model.fire_load_specific_mass)
-                        burning_temperature -= delta_temperature
-                        time += 1
-                        y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
-                    hose_UAV_fire_model.extinguished_area += 1
-                else:
-                    self.hose_UAV_fire_extinguishing_time_label.setStyleSheet("background-color: lightcoral")
-                    self.hose_UAV_fire_extinguishing_time_label.setText("Пожар не потушен")
-                    self.hose_UAV_efficiency_label.setText("")
+        
+            y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
+            fire_power = y[-1]
+            fire_power_per_meter = fire_power / (self.area - hose_UAV_fire_model.extinguished_area)
+            if EA_power > fire_power_per_meter :
+                burning_temperature = 800
+                while burning_temperature > 350:
+                    delta_temperature = (EA_power - fire_power_per_meter) / (hose_UAV_fire_model.heat_capacity * hose_UAV_fire_model.fire_load_specific_mass)
+                    burning_temperature -= delta_temperature
                     time += 1
-                    x = np.linspace(0, time, time)
-                    return x, y
+                    y = np.append(y, hose_UAV_fire_model.fire_calculate(time))
+                hose_UAV_fire_model.extinguished_area += 1
+            else:
+                self.hose_UAV_fire_extinguishing_time_label.setStyleSheet("background-color: lightcoral")
+                self.hose_UAV_fire_extinguishing_time_label.setText("Пожар не потушен")
+                self.hose_UAV_efficiency_label.setText("")
                 time += 1
+                x = np.linspace(0, time, time)
+                return x, y
+            time += 1
 
 
         hose_UAV_fire_extinguishing_time = time - (self.time_extinguishing_start * 60)
